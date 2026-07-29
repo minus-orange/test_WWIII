@@ -23,6 +23,12 @@ needs to be obtained from our ftp site. Steps to successfully acquire and instal
 the framework are outlined in our [Quick Start](https://github.com/NOAA-EMC/WW3/wiki/Quick-Start)
 guide.
 
+## Project documentation (Japanese)
+
+Japanese notes for the locally tested `ST4_UOST` configuration are available
+in [docs/ja/README.md](docs/ja/README.md). They cover the `ww3_shel` processing
+flow, switch selection, reproducible build procedure, and run preparation.
+
 ## Disclaimer
 
 The United States Department of Commerce (DOC) GitHub project code is provided
