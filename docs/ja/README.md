@@ -11,6 +11,7 @@
 | [ST4_UOST switch仕様](switch_ST4_UOST.md) | 使用switch、主要物理過程、コンパイル時の選択内容 |
 | [ビルド手順と確認結果](build_ST4_UOST.md) | macOS arm64で再現可能なCMakeビルド手順と生成LM |
 | [実行準備チェックリスト](run_preparation.md) | `ww3_grid`から計算・後処理までに必要な入力と確認事項 |
+| [CPU基準テスト](cpu_baseline_tests.md) | 小規模な伝播、ST4ソース項、UOSTのCPU実行結果と再実行手順 |
 
 ## 対象
 

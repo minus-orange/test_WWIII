@@ -6694,7 +6694,7 @@ CONTAINS
          '    local calibration factor: ',F5.2,  &
          '    shadow calibration factor: ',F5.2)
 4502 FORMAT ('  &UOST UOSTFILELOCAL = ',A,', UOSTFILESHADOW = ',A,/ &
-         '        UOSTFACTORLOCAL = ',F5.2', UOSTFACTORSHADOW = ',F5.2,' /')
+         '        UOSTFACTORLOCAL = ',F5.2,', UOSTFACTORSHADOW = ',F5.2,' /')
 #endif
     !
 950 FORMAT (/'  Propagation scheme : '/                             &
