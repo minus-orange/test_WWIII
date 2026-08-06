@@ -5,6 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd "${script_dir}/.." && pwd)"
 case_dir="${repo_dir}/regtests/ww3_ts4"
 expected_switches="${WW3_EXPECT_SWITCHES:-ST4 UOST}"
+default_library_root="${repo_dir}/external/nvhpc-libs"
 
 if [[ $# -gt 1 ]]; then
   echo "Usage: $0 [work-directory]" >&2
@@ -83,12 +84,29 @@ else
   pass "no fatal/error/NaN/Infinity keyword was found"
 fi
 
-if ! command -v ncdump >/dev/null 2>&1; then
-  fail "ncdump is required for NetCDF validation"
+ncdump_cmd=""
+if [[ -n "${WW3_NCDUMP:-}" ]]; then
+  ncdump_cmd="${WW3_NCDUMP}"
+elif command -v ncdump >/dev/null 2>&1; then
+  ncdump_cmd="$(command -v ncdump)"
+else
+  for prefix in "${WW3_NETCDF_ROOT:-}" "${NetCDF_ROOT:-}" \
+    "${WW3_LIB_PREFIX:-}" "${WW3_LIB_ROOT:-${default_library_root}}/install"; do
+    [[ -n "${prefix}" ]] || continue
+    if [[ -x "${prefix}/bin/ncdump" ]]; then
+      ncdump_cmd="${prefix}/bin/ncdump"
+      break
+    fi
+  done
+fi
+
+if [[ -z "${ncdump_cmd}" || ! -x "${ncdump_cmd}" ]]; then
+  fail "ncdump was not found; expected external/nvhpc-libs/install/bin/ncdump"
 elif [[ ! -s "${work_dir}/ww3.200001.nc" ]]; then
   fail "NetCDF validation could not start"
 else
-  header="$(ncdump -h "${work_dir}/ww3.200001.nc")"
+  pass "NetCDF validation uses ${ncdump_cmd}"
+  header="$("${ncdump_cmd}" -h "${work_dir}/ww3.200001.nc")"
   if grep -Eq 'time = UNLIMITED ; // \(49 currently\)' <<< "${header}" &&
      grep -Eq 'longitude = 13 ;' <<< "${header}" &&
      grep -Eq 'latitude = 12 ;' <<< "${header}" &&
@@ -106,7 +124,7 @@ else
     fi
   done
 
-  if hs_summary="$(ncdump -v hs "${work_dir}/ww3.200001.nc" | awk '
+  if hs_summary="$("${ncdump_cmd}" -v hs "${work_dir}/ww3.200001.nc" | awk '
     /^[[:space:]]*hs =/ { in_data=1 }
     in_data {
       line=$0

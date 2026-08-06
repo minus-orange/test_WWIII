@@ -77,6 +77,13 @@ mpirun --version
 ./tools/check_nvhpc_uost_test.sh
 ```
 
+`ncdump`は`PATH`に加え、`WW3_NETCDF_ROOT`、`NetCDF_ROOT`、`WW3_LIB_PREFIX`、
+既定の`external/nvhpc-libs/install/bin`から自動検出する。別の場所にある場合は指定できる。
+
+```bash
+WW3_NCDUMP=/path/to/netcdf/bin/ncdump ./tools/check_nvhpc_uost_test.sh
+```
+
 確認内容:
 
 - 4 programの終了コードと`End of program`

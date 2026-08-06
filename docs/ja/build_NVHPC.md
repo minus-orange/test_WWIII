@@ -237,6 +237,7 @@ nf-config --all
 | wrapperを見つけられない | `WW3_NVHPC_MPIFORT`と`WW3_NVHPC_MPICC`を設定します。 |
 | 以前のcompilerが使われる | 別のbuild directoryを指定します。CMakeはcompiler情報をbuild directoryにcacheします。 |
 | `ww3_strt`が`help-opal-runtime.txt`、`MPI_Init`で停止 | 移設されたHPC-XのLMを直接起動しています。コンパイル時と同じmoduleをloadし、`mpirun -np 1`経由で起動します。スモークテストscriptは全LMにこの起動方法を使用します。 |
+| 結果確認で`ncdump is required` | NetCDFの`bin`が`PATH`にありません。最新版の確認scriptは`external/nvhpc-libs/install/bin/ncdump`も自動検出します。 |
 | OpenACC時にGPU指定で失敗 | 実機のcompute capabilityと`-gpu=ccXY`、HPC SDKが対応するCUDA toolchainを確認します。 |
 
 ## このリポジトリでの検証範囲
