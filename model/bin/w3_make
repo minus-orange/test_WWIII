@@ -213,6 +213,15 @@
     echo 'Shared Object     : No'
   fi
 
+  # w3iopomd uses the NetCDF Fortran module when NC4 is selected.  It is a
+  # dependency of programs historically classified as non-NetCDF (including
+  # ww3_outp and ww3_shel), so all targets need the NetCDF compile/link flags.
+  if grep -qw NC4 $switch_file
+  then
+    cdf_programs="$cdf_programs $reg_programs"
+    reg_programs=""
+  fi
+
 # 1.f Set sequential or parallel folders - - - - - - - - - - - - - - - - - - -
 
   flag_SHRD=`grep SHRD $switch_file | wc -l | awk '{ print $1}'`

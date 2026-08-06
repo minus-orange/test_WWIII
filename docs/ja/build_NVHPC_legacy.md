@@ -55,6 +55,11 @@ WW3 legacy buildは1個の`NETCDF_CONFIG`に対して、NetCDF-Cの`--libs`と
 NetCDF-Fortranの`--flibs`の両方を要求する。現在の`nc-config`と`nf-config`は
 それぞれ片方だけを提供するため、`tools/nvhpc_netcdf_config.sh`が要求を振り分ける。
 
+また、上流のlegacy `w3_make`では`ww3_outp`などが非NetCDF programに分類されるが、
+`NC4`構成の`w3iopomd`は無条件に`netcdf.mod`を使用する。本リポジトリでは`NC4`選択時に
+全LMへNetCDFのcompile/link flagsを設定し、依存moduleをどの順序で構築しても
+`netcdf.mod`を参照できるようにしている。
+
 | WW3からの要求 | 呼び出すutility |
 |---|---|
 | `--version`、`--has-nc4`、`--libs` | `nc-config` |
@@ -100,6 +105,12 @@ WW3_BIN_DIR="$PWD/model/exe" ./tools/run_nvhpc_uost_test.sh
 ```
 
 `DIST MPI`構成のため、前処理を含むLMはHPC-Xの`mpirun`経由で実行される。
+
+## トラブルシュート
+
+| 症状 | 原因と対処 |
+|---|---|
+| `w3iopomd.F90`で`Unable to open MODULE file netcdf.mod` | 古い`w3_make`が`ww3_outp`を非NetCDF programとしてコンパイルしている。最新版へ`git pull`後、同じbuild scriptを再実行する。成功済みobjectは再利用されるため、手動削除は不要。 |
 
 ## CMake版との違い
 
