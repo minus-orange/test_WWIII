@@ -943,11 +943,14 @@ create_file_list()
                 aux="constants w3servmd w3timemd w3gsrumd" ;;
       ww3_trnc)
                core=
-               data="$memcode w3gdatmd w3odatmd"
+               # ww3_trnc reads the model definition through W3IOGR.  The
+               # legacy list predates that call (and the NL1 W3ADATMD setup),
+               # so include W3IOGR and its switch-selected dependencies.
+               data="$memcode w3gdatmd w3adatmd w3idatmd w3odatmd"
                prop=
-            sourcet=
-                 IO=
-                aux="constants w3servmd w3timemd w3gsrumd w3nmltrncmd" ;;
+            sourcet="$stx $flx $nlx $btx $is $uostmd"
+                 IO='w3iogrmd'
+                aux="constants w3servmd w3timemd w3arrymd w3dispmd w3gsrumd w3nmltrncmd" ;;
       ww3_grib)
                core=
                data="w3parall wmmdatmd w3triamd $memcode w3gdatmd w3wdatmd w3adatmd w3idatmd w3odatmd"

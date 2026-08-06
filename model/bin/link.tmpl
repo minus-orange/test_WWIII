@@ -163,8 +163,14 @@
     fi
   done
 
-  $comp $opt $objects $libs $rpath                  > link.out 2> link.err
-  OK="$?"
+  # Do not let `bash -e` exit before the diagnostic block below.  Otherwise
+  # make only reports "Error 2" and hides the actual linker message.
+  if $comp $opt $objects $libs $rpath                > link.out 2> link.err
+  then
+    OK=0
+  else
+    OK="$?"
+  fi
 
 # --------------------------------------------------------------------------- #
 # 4. Postprocessing                                                           #

@@ -111,6 +111,10 @@ WW3_BIN_DIR="$PWD/model/exe" ./tools/run_nvhpc_uost_test.sh
 | 症状 | 原因と対処 |
 |---|---|
 | `w3iopomd.F90`で`Unable to open MODULE file netcdf.mod` | 古い`w3_make`が`ww3_outp`を非NetCDF programとしてコンパイルしている。最新版へ`git pull`後、同じbuild scriptを再実行する。成功済みobjectは再利用されるため、手動削除は不要。 |
+| `ww3_trnc`のリンクで`makefile:... Error 2` | `ww3_trnc`が使用する`W3IOGRMD`と、`NL1`時の`W3ADATMD`が元のlegacy依存リストにない。最新版では依存を補正済み。`git pull`後、同じbuild scriptを先頭から再実行する。 |
+
+リンクに再度失敗した場合は、最新版では`*** error in linking ***`以降に実際の
+未解決symbol等が表示される。その末尾を写真で共有する。
 
 ## CMake版との違い
 
