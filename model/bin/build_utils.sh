@@ -969,7 +969,9 @@ create_file_list()
       ww3_gint)
                core=
                data="w3parall wmmdatmd $memcode w3gdatmd w3wdatmd w3adatmd w3idatmd w3odatmd"
-                 IO='w3iogrmd w3iogomd'
+                 # Restart interpolation added W3IORS calls to ww3_gint, but
+                 # the legacy link list was not updated with the source.
+                 IO='w3iogrmd w3iogomd w3iorsmd'
                prop=
             sourcet="$pdlibcode $pdlibyow $db $bt $st $nl $is $uostmd"
                 aux="constants w3triamd w3servmd  w3arrymd w3dispmd w3timemd w3gsrumd"
