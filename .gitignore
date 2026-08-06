@@ -1,4 +1,5 @@
 watch3.env
+external/nvhpc-libs/
 cases
 data_regtests
 smc_docs/*.pdf 

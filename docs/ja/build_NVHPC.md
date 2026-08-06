@@ -13,6 +13,7 @@ NVIDIA HPC SDKの`nvfortran`で全load moduleをコンパイルするための�
 - GNU Fortran専用の`-fallow-argument-mismatch`等をNVIDIA分岐から除外
 - NVHPC版`mpifort`/`mpicc`を選ぶCMake toolchain file
 - 誤ってGNU/Intel版MPI wrapperを選んだ場合のconfigure時エラー
+- zlib、HDF5、NetCDF-C、NetCDF-Fortranの検証付きダウンロード・ビルドscript
 - 同じconfigure/build手順を実行する`tools/build_nvhpc.sh`
 
 ## 前提環境
@@ -55,10 +56,81 @@ export WW3_NVHPC_MPIFORT=/path/to/nvhpc/mpi/openmpi/bin/mpifort
 export WW3_NVHPC_MPICC=/path/to/nvhpc/mpi/openmpi/bin/mpicc
 ```
 
-NetCDFが標準の探索場所にない場合は、インストールprefixを指定します。
+## NetCDF依存ライブラリの準備
+
+画像の`NetCDF_C_LIBRARY-NOTFOUND`と`NetCDF_Fortran_LIBRARY-NOTFOUND`は、
+NVHPCで利用できるNetCDF-C／NetCDF-Fortranが環境にないことを示します。
+アーカイブはサイズが大きく、上流のライセンス・更新・改変履歴も分離して管理するため、
+Gitには含めません。代わりに公式配布元、バージョン、SHA-256を固定したscriptを
+登録しています。
+
+| ライブラリ | 固定バージョン | 用途 |
+|---|---:|---|
+| zlib | 1.3.2 | HDF5圧縮filter |
+| HDF5 | 1.14.6 | NetCDF-4形式 |
+| NetCDF-C | 4.10.1 | NetCDF本体とC API |
+| NetCDF-Fortran | 4.6.4 | `netcdf.mod`とFortran API |
+
+NVHPC moduleをloadした後、次の2段階を実行します。
 
 ```bash
-export NetCDF_ROOT=/path/to/nvhpc-netcdf
+module load hpc_sdk/nvhpc/26.3
+
+# 1. 公式source archiveをダウンロードしSHA-256を検証
+./tools/download_nvhpc_libraries.sh
+
+# 2. nvc/nvfortranでコンパイル・インストール
+./tools/build_nvhpc_libraries.sh
+```
+
+既定では`external/nvhpc-libs`以下を使用します。このディレクトリは`.gitignore`対象です。
+
+| directory | 内容 |
+|---|---|
+| `external/nvhpc-libs/downloads` | 検証済みsource archive |
+| `external/nvhpc-libs/sources` | 展開したsource |
+| `external/nvhpc-libs/build` | 各ライブラリのbuild tree |
+| `external/nvhpc-libs/install` | WW3から参照するinstall prefix |
+
+ダウンロードとコンパイルを一度に行う場合は、2番目のscriptだけで構いません。
+archiveがない場合は、自動的にダウンロードscriptを呼び出します。再実行時には、
+検証済みarchiveと既存build treeを再利用します。
+
+インターネット接続できない計算機では、接続可能な端末でダウンロードscriptを実行し、
+`downloads`ディレクトリだけを計算機へコピーしてください。build scriptは各archiveを
+再度SHA-256検証します。
+
+保存先と並列数は環境変数で変更できます。
+
+```bash
+WW3_LIB_ROOT=/work/k-hanagata/ww3-nvhpc-libs \
+WW3_LIB_JOBS=16 \
+./tools/build_nvhpc_libraries.sh
+```
+
+ライブラリ付属testも実行する場合は`WW3_LIB_RUN_TESTS=ON`を指定します。既定は
+コンパイル確認を優先して`OFF`です。いずれの場合も最後に`netcdf.mod`を使用する
+小さなFortran programをコンパイル・リンク・実行し、C APIまで到達できることを
+確認します。
+
+```bash
+WW3_LIB_RUN_TESTS=ON ./tools/build_nvhpc_libraries.sh
+```
+
+この構成はWW3に不要なDAP、NCZarr、S3、libxml2、外部圧縮pluginとparallel HDF5を
+無効化し、shared libraryのみを作って依存関係を最小化しています。WW3自体のMPI並列
+実行は引き続き利用できます。
+
+NetCDFを別の場所へインストールした場合は、そのprefixを指定します。
+
+```bash
+export WW3_NETCDF_ROOT=/path/to/nvhpc-netcdf
+```
+
+共有ライブラリを実行時に発見できない環境では、次も設定します。
+
+```bash
+export LD_LIBRARY_PATH=/path/to/nvhpc-netcdf/lib:/path/to/nvhpc-netcdf/lib64:${LD_LIBRARY_PATH:-}
 ```
 
 ## 推奨するコンパイル確認
@@ -68,6 +140,10 @@ export NetCDF_ROOT=/path/to/nvhpc-netcdf
 ```bash
 ./tools/build_nvhpc.sh
 ```
+
+既定の`external/nvhpc-libs/install`にライブラリを作成した場合、
+`build_nvhpc.sh`が自動検出します。NetCDFが見つからない場合は、CMakeを開始する前に
+`build_nvhpc_libraries.sh`の実行方法を表示して終了します。
 
 デフォルト値は次のとおりです。
 
@@ -141,6 +217,7 @@ nf-config --all
 |---|---|
 | `WW3_REQUIRE_NVHPC`エラー | GNU/Intel版MPI wrapperを選択しています。HPC SDK MPIの`bin`を`PATH`の先頭に置くか、wrapperの絶対パスを指定します。 |
 | `netcdf.mod`を読めない | NetCDF-Fortranのコンパイラ不一致が疑われます。NVHPCでビルドしたNetCDFを指定します。 |
+| `NetCDF_*_LIBRARY-NOTFOUND` | `./tools/build_nvhpc_libraries.sh`を実行し、同じprefixのNetCDF-CとNetCDF-Fortranを指定します。 |
 | wrapperを見つけられない | `WW3_NVHPC_MPIFORT`と`WW3_NVHPC_MPICC`を設定します。 |
 | 以前のcompilerが使われる | 別のbuild directoryを指定します。CMakeはcompiler情報をbuild directoryにcacheします。 |
 | OpenACC時にGPU指定で失敗 | 実機のcompute capabilityと`-gpu=ccXY`、HPC SDKが対応するCUDA toolchainを確認します。 |
@@ -157,3 +234,8 @@ nf-config --all
 - [CMake compiler ID一覧](https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_COMPILER_ID.html)
 - [NVIDIA HPC Compilers User's Guide](https://docs.nvidia.com/hpc-sdk/compilers/hpc-compilers-user-guide/index.html)
 - [NVIDIA OpenACC Getting Started Guide](https://docs.nvidia.com/hpc-sdk/compilers/openacc-gs/index.html)
+- [Unidata NetCDF-C CMake build instructions](https://docs.unidata.ucar.edu/netcdf-c/current/netCDF-CMake.html)
+- [Unidata NetCDF-C releases](https://github.com/Unidata/netcdf-c/releases)
+- [Unidata NetCDF-Fortran releases](https://github.com/Unidata/netcdf-fortran/releases)
+- [HDF5 releases](https://github.com/HDFGroup/hdf5/releases)
+- [zlib source releases](https://zlib.net/)
