@@ -113,6 +113,7 @@ WW3_BIN_DIR="$PWD/model/exe" ./tools/run_nvhpc_uost_test.sh
 | `w3iopomd.F90`で`Unable to open MODULE file netcdf.mod` | 古い`w3_make`が`ww3_outp`を非NetCDF programとしてコンパイルしている。最新版へ`git pull`後、同じbuild scriptを再実行する。成功済みobjectは再利用されるため、手動削除は不要。 |
 | `ww3_trnc`のリンクで`makefile:... Error 2` | `ww3_trnc`が使用する`W3IOGRMD`と、`NL1`時の`W3ADATMD`が元のlegacy依存リストにない。最新版では依存を補正済み。build scriptは古い生成makefileだけを自動更新し、成功済みobjectは再利用する。`git pull`後、同じbuild scriptを先頭から再実行する。 |
 | `ww3_gint`のリンクで`w3iorsmd_w3iors_`が未解決 | restart補間処理で追加された`W3IORSMD`が元のlegacy依存リストにない。最新版では`ww3_gint`のlink対象へ追加済み。`git pull`後、同じbuild scriptを再実行する。 |
+| `ww3_sbs1`で`NDSE has not been explicitly declared`と`Label 140 ... never defined` | 上流のlabel文削除時に残った2箇所の不整合。エラー出力unitを宣言済みの`MDSE`へ修正し、`IOSTAT`で処理済みのREAD文から削除済みlabelへの分岐を除去している。 |
 
 リンクに再度失敗した場合は、最新版では`*** error in linking ***`以降に実際の
 未解決symbol等が表示される。その末尾を写真で共有する。

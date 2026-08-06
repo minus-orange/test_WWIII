@@ -248,7 +248,7 @@ PROGRAM W3SBS1
        NAME='times.inp',                                 &
        DESC='times file for sbs driver' )
   OPEN (NDST1,FILE='times.inp',STATUS='OLD',IOSTAT=IERR)
-  IF (IERR.NE.0) CALL EXTOPN(NDSE,IERR,'W3SBS1','TIMES',20)
+  IF (IERR.NE.0) CALL EXTOPN(MDSE,IERR,'W3SBS1','TIMES',20)
 #ifdef W3_T
   WRITE (MDST,9020)
 #endif
@@ -538,7 +538,7 @@ CONTAINS
       !
       DO
         !
-        READ (NDS,END=140,ERR=140,IOSTAT=IERR) TTIME
+        READ (NDS,IOSTAT=IERR) TTIME
         IF (IERR.NE.0) THEN
           BACKSPACE NDS
           IF ( IMPROC .EQ. NMPSCR ) WRITE (MDSS,900)
