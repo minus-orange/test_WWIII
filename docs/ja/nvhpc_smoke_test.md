@@ -16,7 +16,8 @@ module load hpc_sdk/nvhpc/26.3
 ```
 
 既定では`build-nvhpc/bin`の実行ファイルを使用し、1 MPI process、
-`OMP_NUM_THREADS=1`で次を順番に実行する。
+`OMP_NUM_THREADS=1`で次を順番に実行する。HPC-Xの移設されたruntime pathを
+正しく初期化するため、前処理・後処理を含む全programを同じ`mpirun`経由で起動する。
 
 ```text
 ww3_grid → ww3_strt → ww3_shel → ww3_ounf
@@ -41,6 +42,25 @@ WW3_MPIEXEC=mpiexec ./tools/run_nvhpc_uost_test.sh
 
 `SHRD`構成のLMをMPI launcherなしで確認する場合だけ、`WW3_MPIEXEC=none`を指定する。
 今回の`DIST MPI`構成では既定の`mpirun`を使用する。
+
+## HPC-Xの`MPI_Init`エラー
+
+`ww3_strt`などを直接起動すると、HPC-Xがbuild時の
+`/proj/nv/libraries/.../share/openmpi`を参照し、`help-opal-runtime.txt`を開けずに
+`MPI_Init`で停止する場合がある。これはWW3入力データのエラーではなく、HPC-Xの
+runtime初期化経路の問題である。本scriptは全programを`mpirun`から起動して回避する。
+
+再実行前に、コンパイル時と同じmoduleのlauncherが選択されていることを確認する。
+
+```bash
+module load hpc_sdk/nvhpc/26.3
+which mpirun
+mpirun --version
+./tools/run_nvhpc_uost_test.sh
+```
+
+過去の失敗結果は上書きせず残る。新しい実行では別のwork directoryが自動作成されるため、
+失敗directoryを削除する必要はない。
 
 ## 結果確認
 

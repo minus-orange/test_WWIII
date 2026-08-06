@@ -38,12 +38,25 @@ for program in ww3_grid ww3_strt ww3_shel ww3_ounf; do
   fi
 done
 if [[ "${mpi_exec}" != "none" ]]; then
-  command -v "${mpi_exec}" >/dev/null 2>&1 || {
+  mpi_exec_path="$(command -v "${mpi_exec}")" || {
     echo "ERROR: MPI launcher was not found: ${mpi_exec}" >&2
     echo "Set WW3_MPIEXEC to the MPI launcher command." >&2
     exit 1
   }
+else
+  mpi_exec_path="none"
 fi
+
+run_program() {
+  local ranks="$1"
+  local log_file="$2"
+  local program="$3"
+  if [[ "${mpi_exec_path}" == "none" ]]; then
+    "${bin_dir}/${program}" > "${log_file}" 2>&1
+  else
+    "${mpi_exec_path}" -np "${ranks}" "${bin_dir}/${program}" > "${log_file}" 2>&1
+  fi
+}
 
 mkdir "${work_dir}"
 ln -s "${input_dir}/ww3_grid.nml" "${work_dir}/ww3_grid.nml"
@@ -59,7 +72,8 @@ started_epoch="$(date +%s)"
   echo "case=ww3_ts4/input_rg_shel"
   echo "started_utc=${started_utc}"
   echo "bin_dir=${bin_dir}"
-  echo "mpi_exec=${mpi_exec}"
+  echo "mpi_exec=${mpi_exec_path}"
+  echo "prepost_nproc=1"
   echo "nproc=${nproc}"
   echo "omp_num_threads=${OMP_NUM_THREADS}"
 } > "${work_dir}/run-metadata.txt"
@@ -70,26 +84,23 @@ echo "  work     : ${work_dir}"
 if [[ "${mpi_exec}" == "none" ]]; then
   echo "  MPI      : direct execution"
 else
-  echo "  MPI      : ${mpi_exec} -np ${nproc}"
+  echo "  launcher : ${mpi_exec_path}"
+  echo "  MPI      : pre/post -np 1, ww3_shel -np ${nproc}"
 fi
 
 cd "${work_dir}"
 
 echo "[1/4] ww3_grid"
-"${bin_dir}/ww3_grid" > ww3_grid.out 2>&1
+run_program 1 ww3_grid.out ww3_grid
 
 echo "[2/4] ww3_strt"
-"${bin_dir}/ww3_strt" > ww3_strt.out 2>&1
+run_program 1 ww3_strt.out ww3_strt
 
 echo "[3/4] ww3_shel"
-if [[ "${mpi_exec}" == "none" ]]; then
-  "${bin_dir}/ww3_shel" > ww3_shel.out 2>&1
-else
-  "${mpi_exec}" -np "${nproc}" "${bin_dir}/ww3_shel" > ww3_shel.out 2>&1
-fi
+run_program "${nproc}" ww3_shel.out ww3_shel
 
 echo "[4/4] ww3_ounf"
-"${bin_dir}/ww3_ounf" > ww3_ounf.out 2>&1
+run_program 1 ww3_ounf.out ww3_ounf
 
 finished_epoch="$(date +%s)"
 {
