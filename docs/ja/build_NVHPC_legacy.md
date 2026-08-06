@@ -39,10 +39,12 @@ module load hpc_sdk/nvhpc/26.3
 
 scriptは次を事前確認する。
 
-- `nvfortran`、`mpifort`、`mpicc`、`make`の存在
+- `nvfortran`、`mpifort`、`mpicc`、`cc`、`ar`、`make`の存在
 - `mpifort`が内部で`nvfortran`を使用していること
 - NetCDF-Fortranが`nvfortran`で作成されていること
 - `switch_ST4_UOST`の存在
+
+`cc`がmodule環境にない場合は、対象計算機のGCC moduleもloadする。
 
 生成先はWW3標準の`model/exe`である。中間生成物は`model/obj_MPI`、
 `model/mod_MPI`、`model/tmp-nvhpc-legacy`に置かれる。

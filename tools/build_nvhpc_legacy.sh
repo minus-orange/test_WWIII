@@ -35,7 +35,7 @@ require_command() {
   }
 }
 
-for command_name in make nvfortran mpifort mpicc; do
+for command_name in make ar cc nvfortran mpifort mpicc; do
   require_command "${command_name}"
 done
 for config in "${nc_config}" "${nf_config}"; do
