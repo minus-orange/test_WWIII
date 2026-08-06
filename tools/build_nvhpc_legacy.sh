@@ -80,6 +80,20 @@ echo "  scratch  : ${scratch_dir}"
 "${model_dir}/bin/w3_setup" -q -c "${compiler_name}" -s "${switch_name}" \
   -t "${scratch_dir}" "${model_dir}"
 
+# w3_make reuses makefile_<execution type> when the switch is unchanged.  That
+# cache does not track changes to build_utils.sh, so refresh only the generated
+# makefiles while retaining all successfully compiled objects and modules.
+echo "Refreshing WW3 legacy generated makefiles"
+for generated_makefile in \
+  "${model_dir}/src/makefile" \
+  "${model_dir}/src/makefile_SEQ" \
+  "${model_dir}/src/makefile_OMP" \
+  "${model_dir}/src/makefile_MPI" \
+  "${model_dir}/src/makefile_HYB"
+do
+  rm -f "${generated_makefile}"
+done
+
 if [[ -n "${WW3_LEGACY_PROGRAMS:-}" ]]; then
   read -r -a programs <<< "${WW3_LEGACY_PROGRAMS}"
   "${model_dir}/bin/w3_make" "${programs[@]}"
