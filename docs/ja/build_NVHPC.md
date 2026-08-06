@@ -188,6 +188,18 @@ cmake --build build-nvhpc --parallel 4
 configureログのFortran compiler identificationが`NVHPC`であることを確認します。
 正常終了後、21種類のload moduleが`build-nvhpc/bin`に作成されます。
 
+## コンパイル後の実行確認
+
+作成したload moduleは、小規模な13×12格子の公式UOST回帰ケースで確認できます。
+実行と結果検査は別scriptです。
+
+```bash
+./tools/run_nvhpc_uost_test.sh
+./tools/check_nvhpc_uost_test.sh
+```
+
+詳細は[NVHPC版UOSTスモークテスト](nvhpc_smoke_test.md)を参照してください。
+
 ## OpenACCコンパイラ確認（任意・次段階向け）
 
 OpenACC指示行の実装前でも、OpenACC runtimeを含むコンパイル・リンク経路だけを
@@ -228,9 +240,10 @@ nf-config --all
 
 ## このリポジトリでの検証範囲
 
-この環境の作成時点では作業機がmacOSで、NVIDIA HPC SDKはLinux向けのため、
-実際の`nvfortran`コンパイルは実施していません。shell/CMake構文と既存GNU CPU
-ビルドへの回帰がないことを確認し、NVHPCでの実コンパイルは対象Linux環境で行います。
+2026年8月6日に対象Linux環境のNVIDIA HPC SDK 26.3で実コンパイルとリンクが完了し、
+21種類のload moduleが生成された。`ldd`ではNVHPCで作成したNetCDF-Fortran、
+NetCDF-C、HDF5、zlibとHPC-X MPIが解決され、`not found`がないことを確認した。
+計算結果の確認は上記スモークテストで行う。
 
 ## 参考資料
 

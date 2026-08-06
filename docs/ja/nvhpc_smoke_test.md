@@ -1,0 +1,76 @@
+# NVHPC版UOSTスモークテスト
+
+## 目的
+
+NVIDIA HPC SDKで作成した`ST4_UOST`構成の実行ファイルを再コンパイルせずに使い、
+小規模な公式回帰ケースで実行時の正常性を確認する。対象は
+`regtests/ww3_ts4/input_rg_shel`の13×12格子、48時間計算である。
+
+## 実行
+
+NVHPCとMPIのmodule、およびビルドしたNetCDF/HDF5の実行環境を設定したshellで実行する。
+
+```bash
+module load hpc_sdk/nvhpc/26.3
+./tools/run_nvhpc_uost_test.sh
+```
+
+既定では`build-nvhpc/bin`の実行ファイルを使用し、1 MPI process、
+`OMP_NUM_THREADS=1`で次を順番に実行する。
+
+```text
+ww3_grid → ww3_strt → ww3_shel → ww3_ounf
+```
+
+各実行結果は既存結果を上書きせず、
+`regtests/ww3_ts4/work_nvhpc_uost_<UTC日時>_<PID>`へ保存する。
+
+実行ファイルやMPI process数を変更する場合:
+
+```bash
+WW3_BIN_DIR=/path/to/build-nvhpc/bin \
+WW3_TEST_NPROC=2 \
+./tools/run_nvhpc_uost_test.sh
+```
+
+MPI launcherが`mpirun`以外の場合は、コマンド名または絶対パスを指定する。
+
+```bash
+WW3_MPIEXEC=mpiexec ./tools/run_nvhpc_uost_test.sh
+```
+
+`SHRD`構成のLMをMPI launcherなしで確認する場合だけ、`WW3_MPIEXEC=none`を指定する。
+今回の`DIST MPI`構成では既定の`mpirun`を使用する。
+
+## 結果確認
+
+実行scriptが最後に表示したwork directoryを指定する。
+
+```bash
+./tools/check_nvhpc_uost_test.sh \
+  regtests/ww3_ts4/work_nvhpc_uost_<UTC日時>_<PID>
+```
+
+引数を省略すると、同じリポジトリ内で最後に更新されたNVHPC UOST結果を確認する。
+
+```bash
+./tools/check_nvhpc_uost_test.sh
+```
+
+確認内容:
+
+- 4 programの終了コードと`End of program`
+- `mod_def.ww3`、restart、格子・地点出力、NetCDF出力の存在
+- log中のfatal error、NaN、Infinity、MPI abort
+- NetCDFの49時刻×12緯度×13経度と`hs`変数
+- NetCDF metadataに`ST4`と`UOST`が記録されていること
+- 全時刻の有義波高が有限で0～64 mの範囲にあること
+- 主要出力のSHA-256
+
+検査結果はwork directoryの`result-summary.txt`、ハッシュ値は
+`result-sha256sums.txt`へ保存する。初回CPU実行のこれらを保存しておけば、
+OpenACC版との比較対象として利用できる。GPU版は演算順序が変わり得るため、
+SHA-256不一致だけで異常と判断せず、次段階で数値許容誤差による比較を行う。
+
+UOSTの格子幅に関する警告と、境界入力がないことを示す`W3IOBC`警告は、
+この公式回帰ケースで想定される警告である。
