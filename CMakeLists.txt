@@ -11,6 +11,17 @@ project(
   VERSION ${pVersion}
   LANGUAGES C Fortran)
 
+option(WW3_REQUIRE_NVHPC "Fail configuration unless C and Fortran compilers are from NVIDIA HPC SDK" OFF)
+if(WW3_REQUIRE_NVHPC AND
+   (NOT CMAKE_Fortran_COMPILER_ID STREQUAL "NVHPC" OR
+    NOT CMAKE_C_COMPILER_ID STREQUAL "NVHPC"))
+  message(FATAL_ERROR
+    "WW3_REQUIRE_NVHPC=ON, but the selected MPI wrappers are not both backed by NVHPC. "
+    "Fortran: '${CMAKE_Fortran_COMPILER}' (ID: ${CMAKE_Fortran_COMPILER_ID}); "
+    "C: '${CMAKE_C_COMPILER}' (ID: ${CMAKE_C_COMPILER_ID}). "
+    "Use NVHPC-backed mpifort/mpicc wrappers or disable WW3_REQUIRE_NVHPC.")
+endif()
+
 get_directory_property(hasParent PARENT_DIRECTORY)
 if(hasParent)
   # Unset flags that come from Parent (ie UFS or other coupled build)

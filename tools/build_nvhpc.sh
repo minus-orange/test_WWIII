@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_dir="$(cd "${script_dir}/.." && pwd)"
+
+build_dir="${WW3_BUILD_DIR:-${repo_dir}/build-nvhpc}"
+switch_file="${WW3_SWITCH:-model/bin/switch_ST4_UOST}"
+build_type="${WW3_BUILD_TYPE:-Release}"
+jobs="${WW3_JOBS:-4}"
+
+cmake_args=(
+  -S "${repo_dir}"
+  -B "${build_dir}"
+  -DCMAKE_TOOLCHAIN_FILE="${repo_dir}/cmake/toolchains/nvhpc-mpi.cmake"
+  -DSWITCH="${switch_file}"
+  -DCMAKE_BUILD_TYPE="${build_type}"
+)
+
+# This is empty for the CPU compile check. It can later carry NVIDIA options
+# such as: -acc -gpu=cc80 -Minfo=accel
+if [[ -n "${WW3_NVHPC_FLAGS:-}" ]]; then
+  cmake_args+=("-DCMAKE_Fortran_FLAGS=${WW3_NVHPC_FLAGS}")
+fi
+
+echo "Configuring WW3 with NVIDIA HPC SDK"
+echo "  source : ${repo_dir}"
+echo "  build  : ${build_dir}"
+echo "  switch : ${switch_file}"
+echo "  type   : ${build_type}"
+
+cmake "${cmake_args[@]}" "$@"
+cmake --build "${build_dir}" --parallel "${jobs}"
+
+echo "Build completed. Load modules are in ${build_dir}/bin"

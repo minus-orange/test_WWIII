@@ -75,14 +75,10 @@ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "^(GNU)$")
     target_compile_options(ww3_lib PUBLIC -fallow-argument-mismatch)
   endif()
 
-elseif(CMAKE_Fortran_COMPILER_ID MATCHES "PGI")
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "^(NVHPC|PGI)$")
   set(compile_flags -g -i4 -r4 -Kieee)
   set(compile_flags_release -O3)
   set(compile_flags_debug -O0 -Mbounds -Mchkfpstk -Mchkstk -Mdalign -Mdclchk -Mdepchk -Miomutex -Ktrap=fp -Mrecursive -traceback)
-  
-  if(${CMAKE_Fortran_COMPILER_VERSION} VERSION_GREATER_EQUAL 10)
-    target_compile_options(ww3_lib PUBLIC -fallow-argument-mismatch -fallow-invalid-boz)
-  endif()
 
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
   # TODO: Where do we set -homp for OpenMP compiles?

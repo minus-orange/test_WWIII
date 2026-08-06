@@ -146,7 +146,7 @@ Append to [src_list.cmake](./src/cmake/src_list.cmake)
 
 Compiler flags are set per compiler in [CMakeLists.txt](./src/CMakeLists.txt)
 
-Supported compilers are Intel, GNU, PGI and Cray.
+Supported compilers are Intel, GNU, NVIDIA HPC SDK (NVHPC/PGI) and Cray.
 
 ### How to build a single target?
 
