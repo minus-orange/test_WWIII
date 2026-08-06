@@ -91,6 +91,7 @@ WW3_NCDUMP=/path/to/netcdf/bin/ncdump ./tools/check_nvhpc_uost_test.sh
 - log中のfatal error、NaN、Infinity、MPI abort
 - NetCDFの49時刻×12緯度×13経度と`hs`変数
 - NetCDF metadataに`ST4`と`UOST`が記録されていること
+- `ww3_grid.out`と`log.ww3`でUOST設定と2個の障害物データ読み込みが確認できること
 - 全時刻の有義波高が有限で0～64 mの範囲にあること
 - 主要出力のSHA-256
 

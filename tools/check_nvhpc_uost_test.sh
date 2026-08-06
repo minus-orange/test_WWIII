@@ -116,8 +116,13 @@ else
     fail "NetCDF dimensions or hs variable differ from the expected case"
   fi
 
+  switch_metadata="$(awk '
+    /WAVEWATCH_III_switches/ { capture=1 }
+    capture { printf "%s ", $0 }
+    capture && /;/ { exit }
+  ' <<< "${header}")"
   for switch_name in ${expected_switches}; do
-    if grep -Eq "WAVEWATCH_III_switches.*(^|[[:space:]])${switch_name}([[:space:]]|\")" <<< "${header}"; then
+    if grep -Eq "(^|[^[:alnum:]_])${switch_name}([^[:alnum:]_]|$)" <<< "${switch_metadata}"; then
       pass "NetCDF metadata contains switch ${switch_name}"
     else
       fail "NetCDF metadata does not contain switch ${switch_name}"
@@ -150,6 +155,13 @@ else
   else
     fail "Hs contains no valid values or is outside [0, 64] m"
   fi
+fi
+
+if grep -q 'Unresolved Obstacles Source Term (UOST)' "${work_dir}/ww3_grid.out" 2>/dev/null &&
+   [[ "$(grep -c 'LOADING UOST SETTINGS' "${work_dir}/log.ww3" 2>/dev/null || true)" -ge 2 ]]; then
+  pass "UOST was configured and both obstruction datasets were loaded"
+else
+  fail "UOST configuration or obstruction dataset loading was not confirmed"
 fi
 
 sha256_file() {
