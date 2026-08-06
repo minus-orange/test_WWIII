@@ -1,5 +1,8 @@
 # NVIDIA HPC SDKでのビルド環境
 
+CMakeを使わないWW3標準legacy buildは
+[NVIDIA HPC SDK legacy build](build_NVHPC_legacy.md)を参照する。
+
 ## 目的
 
 `switch_ST4_UOST`を変更せず、WW3 7.14の標準CMakeビルドに沿って

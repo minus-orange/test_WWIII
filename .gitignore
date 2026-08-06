@@ -166,6 +166,14 @@ model/bin/w3prnt
 model/bin/w3split
 model/wwatch3.env
 model/bin/wwatch3.env
+model/exe/
+model/obj/
+model/obj_*/
+model/mod/
+model/mod_*/
+model/tmp-nvhpc-legacy/
+model/src/makefile
+model/src/makefile_*
 *.swp
 */*.swp
 */*/*.swp

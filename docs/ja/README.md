@@ -13,6 +13,7 @@
 | [実行準備チェックリスト](run_preparation.md) | `ww3_grid`から計算・後処理までに必要な入力と確認事項 |
 | [CPU基準テスト](cpu_baseline_tests.md) | 小規模な伝播、ST4ソース項、UOSTのCPU実行結果と再実行手順 |
 | [NVIDIA HPC SDKビルド環境](build_NVHPC.md) | `nvfortran`とNVHPC版MPI/NetCDFを使う標準CMakeビルド手順 |
+| [NVIDIA HPC SDK legacy build](build_NVHPC_legacy.md) | CMakeを使わない`w3_setup`＋`w3_make`手順 |
 | [NVHPC版UOSTスモークテスト](nvhpc_smoke_test.md) | 作成済みLMによる小規模実行と結果検査script |
 
 ## 対象
