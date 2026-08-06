@@ -63,7 +63,13 @@ done
 
 mkdir -p "${download_dir}" "${source_dir}" "${build_root}" "${install_prefix}"
 
-WW3_LIB_DOWNLOAD_DIR="${download_dir}" "${script_dir}/download_nvhpc_libraries.sh"
+echo "Verifying source archives (no network access)"
+if ! WW3_LIB_DOWNLOAD_DIR="${download_dir}" \
+  "${script_dir}/download_nvhpc_libraries.sh" --verify-only; then
+  echo "ERROR: library sources are not ready." >&2
+  echo "Run tools/download_nvhpc_libraries.sh before this build script." >&2
+  exit 1
+fi
 
 extract_once "${ZLIB_ARCHIVE}" "zlib-${ZLIB_VERSION}"
 extract_once "${HDF5_ARCHIVE}" "hdf5-${HDF5_VERSION}"

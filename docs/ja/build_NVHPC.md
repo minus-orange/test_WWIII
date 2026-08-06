@@ -92,9 +92,10 @@ module load hpc_sdk/nvhpc/26.3
 | `external/nvhpc-libs/build` | 各ライブラリのbuild tree |
 | `external/nvhpc-libs/install` | WW3から参照するinstall prefix |
 
-ダウンロードとコンパイルを一度に行う場合は、2番目のscriptだけで構いません。
-archiveがない場合は、自動的にダウンロードscriptを呼び出します。再実行時には、
-検証済みarchiveと既存build treeを再利用します。
+ダウンロードとコンパイルは明確に分離しています。`build_nvhpc_libraries.sh`は
+ネットワークへ接続せず、事前にダウンロードされた全archiveのSHA-256が一致する場合だけ
+コンパイルを開始します。archiveが不足している、または破損している場合は停止するため、
+必ず先に`download_nvhpc_libraries.sh`を実行してください。
 
 インターネット接続できない計算機では、接続可能な端末でダウンロードscriptを実行し、
 `downloads`ディレクトリだけを計算機へコピーしてください。build scriptは各archiveを
@@ -104,8 +105,11 @@ archiveがない場合は、自動的にダウンロードscriptを呼び出し�
 
 ```bash
 WW3_LIB_ROOT=/work/k-hanagata/ww3-nvhpc-libs \
-WW3_LIB_JOBS=16 \
-./tools/build_nvhpc_libraries.sh
+  ./tools/download_nvhpc_libraries.sh
+
+WW3_LIB_ROOT=/work/k-hanagata/ww3-nvhpc-libs \
+  WW3_LIB_JOBS=16 \
+  ./tools/build_nvhpc_libraries.sh
 ```
 
 ライブラリ付属testも実行する場合は`WW3_LIB_RUN_TESTS=ON`を指定します。既定は
