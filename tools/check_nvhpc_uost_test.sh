@@ -38,7 +38,7 @@ summary="${work_dir}/result-summary.txt"
 : > "${summary}"
 
 pass() {
-  echo "PASS: $*" | tee -a "${summary}"
+  echo "PASS: $*" >> "${summary}"
 }
 
 fail() {
@@ -152,8 +152,15 @@ done
 pass "result SHA-256 values were written to result-sha256sums.txt"
 
 if [[ "${failures}" -ne 0 ]]; then
+  passed="$(grep -c '^PASS:' "${summary}" || true)"
+  echo "checks_passed=${passed} checks_failed=${failures}"
+  echo "summary=${summary}"
   echo "RESULT: FAIL (${failures} checks failed)" | tee -a "${summary}" >&2
   exit 1
 fi
 
+grep '^PASS: Hs values' "${summary}" || true
+passed="$(grep -c '^PASS:' "${summary}" || true)"
+echo "checks_passed=${passed} checks_failed=0"
+echo "summary=${summary}"
 echo "RESULT: PASS" | tee -a "${summary}"
