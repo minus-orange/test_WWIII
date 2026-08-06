@@ -117,6 +117,10 @@ WW3_BIN_DIR="$PWD/model/exe" ./tools/run_nvhpc_uost_test.sh
 リンクに再度失敗した場合は、最新版では`*** error in linking ***`以降に実際の
 未解決symbol等が表示される。その末尾を写真で共有する。
 
+コンパイルに失敗した場合も、最新版では`--- compiler diagnostics ---`の下へ
+compilerのエラー本文を表示する。入力共有が写真または短いテキストに限られるため、
+別ログを開かなくても原因箇所を確認できるようにしている。
+
 ## CMake版との違い
 
 | 項目 | CMake版 | legacy版 |

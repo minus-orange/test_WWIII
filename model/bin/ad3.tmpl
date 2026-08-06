@@ -313,6 +313,9 @@ then
       if [ "$nr_err" != '0' ]
       then
         echo "      $nr_err errors found, see $path_w/$name.err"
+        echo '--- compiler diagnostics ------------------------------------------'
+        cat $name.err
+        echo '-----------------------------------------------------------------'
         list='yes'
       else
         if [ "$nr_war" != '0' ]
