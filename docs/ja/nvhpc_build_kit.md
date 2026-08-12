@@ -1,5 +1,9 @@
 # NVHPC移植用ビルドキット
 
+生成済みarchiveは
+[`artifacts/ww3-nvhpc-legacy-kit-7b149b10.tar.gz`](../../artifacts/ww3-nvhpc-legacy-kit-7b149b10.tar.gz)
+としてGitにも登録している。
+
 ## 目的
 
 別ディレクトリにあるWAVEWATCH III 7.14コードへ、NVIDIA HPC SDKの
