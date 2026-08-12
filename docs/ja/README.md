@@ -15,6 +15,7 @@
 | [NVIDIA HPC SDKビルド環境](build_NVHPC.md) | `nvfortran`とNVHPC版MPI/NetCDFを使う標準CMakeビルド手順 |
 | [NVIDIA HPC SDK legacy build](build_NVHPC_legacy.md) | CMakeを使わない`w3_setup`＋`w3_make`手順 |
 | [NVHPC版UOSTスモークテスト](nvhpc_smoke_test.md) | 作成済みLMによる小規模実行と結果検査script |
+| [NVHPC移植用ビルドキット](nvhpc_build_kit.md) | 別のWW3 7.14 source directoryへNVHPC build環境を安全に移植する手順 |
 
 ## 対象
 

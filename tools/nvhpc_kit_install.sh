@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+kit_dir="${script_dir}"
+
+usage() {
+  cat <<'EOF'
+Usage: ./install.sh [--mode all|cmake|legacy] [--force] WW3_SOURCE_DIR
+
+Install the portable NVIDIA HPC SDK build support into a WW3 7.14 source tree.
+The default mode is all. --force only permits replacement of differing support
+files; it never forces a source patch that does not apply cleanly.
+EOF
+}
+
+mode="all"
+force="no"
+target=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      [[ $# -ge 2 ]] || { usage >&2; exit 2; }
+      mode="$2"
+      shift 2
+      ;;
+    --force)
+      force="yes"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -* )
+      echo "ERROR: unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      [[ -z "${target}" ]] || { echo "ERROR: specify one WW3 source directory." >&2; exit 2; }
+      target="$1"
+      shift
+      ;;
+  esac
+done
+
+case "${mode}" in
+  all|cmake|legacy) ;;
+  *) echo "ERROR: --mode must be all, cmake, or legacy." >&2; exit 2 ;;
+esac
+[[ -n "${target}" ]] || { usage >&2; exit 2; }
+[[ -d "${target}" ]] || { echo "ERROR: directory not found: ${target}" >&2; exit 1; }
+target="$(cd "${target}" && pwd)"
+
+for required in VERSION model/bin model/src; do
+  [[ -e "${target}/${required}" ]] || {
+    echo "ERROR: not a WW3 source tree; missing ${target}/${required}" >&2
+    exit 1
+  }
+done
+version="$(tr -d '[:space:]' < "${target}/VERSION")"
+if [[ "${version}" != "7.14" ]]; then
+  echo "ERROR: this kit targets WW3 7.14 (target reports '${version}')." >&2
+  echo "Create a kit for that source version instead of forcing this patch." >&2
+  exit 1
+fi
+command -v git >/dev/null 2>&1 || {
+  echo "ERROR: git is required to check and apply the source patches." >&2
+  exit 1
+}
+if command -v sha256sum >/dev/null 2>&1; then
+  (cd "${kit_dir}" && sha256sum -c SHA256SUMS >/dev/null)
+elif command -v shasum >/dev/null 2>&1; then
+  (cd "${kit_dir}" && shasum -a 256 -c SHA256SUMS >/dev/null)
+else
+  echo "ERROR: sha256sum or shasum is required to verify the build kit." >&2
+  exit 1
+fi
+
+patches=("patches/common-ww3-7.14.patch")
+overlays=("files/common")
+if [[ "${mode}" == "all" || "${mode}" == "cmake" ]]; then
+  patches+=("patches/cmake-ww3-7.14.patch")
+  overlays+=("files/cmake")
+fi
+if [[ "${mode}" == "all" || "${mode}" == "legacy" ]]; then
+  patches+=("patches/legacy-ww3-7.14.patch")
+  overlays+=("files/legacy")
+fi
+
+declare -a patch_actions=()
+for relative_patch in "${patches[@]}"; do
+  patch_file="${kit_dir}/${relative_patch}"
+  [[ -s "${patch_file}" ]] || { echo "ERROR: missing patch: ${patch_file}" >&2; exit 1; }
+  if (cd "${target}" && git apply --check "${patch_file}" >/dev/null 2>&1); then
+    patch_actions+=("apply")
+  elif (cd "${target}" && git apply --reverse --check "${patch_file}" >/dev/null 2>&1); then
+    patch_actions+=("skip")
+  else
+    echo "ERROR: patch does not apply cleanly: ${relative_patch}" >&2
+    echo "The target may be a different WW3 revision or contain overlapping edits." >&2
+    (cd "${target}" && git apply --check "${patch_file}") || true
+    echo "No source patches or support files were changed." >&2
+    exit 1
+  fi
+done
+
+declare -a overlay_sources=()
+declare -a overlay_destinations=()
+for overlay in "${overlays[@]}"; do
+  while IFS= read -r -d '' source_file; do
+    relative_file="${source_file#${kit_dir}/${overlay}/}"
+    destination="${target}/${relative_file}"
+    if [[ -e "${destination}" ]] && ! cmp -s "${source_file}" "${destination}" && [[ "${force}" != "yes" ]]; then
+      echo "ERROR: support file already exists with different content: ${destination}" >&2
+      echo "Review it first, or repeat with --force to replace support files." >&2
+      echo "No source patches or support files were changed." >&2
+      exit 1
+    fi
+    overlay_sources+=("${source_file}")
+    overlay_destinations+=("${destination}")
+  done < <(find "${kit_dir}/${overlay}" -type f -print0 | sort -z)
+done
+
+for index in "${!patches[@]}"; do
+  if [[ "${patch_actions[$index]}" == "apply" ]]; then
+    echo "Applying ${patches[$index]}"
+    (cd "${target}" && git apply "${kit_dir}/${patches[$index]}")
+  else
+    echo "Already applied: ${patches[$index]}"
+  fi
+done
+
+for index in "${!overlay_sources[@]}"; do
+  mkdir -p "$(dirname "${overlay_destinations[$index]}")"
+  cp "${overlay_sources[$index]}" "${overlay_destinations[$index]}"
+done
+
+echo "NVHPC build support installed"
+echo "  target : ${target}"
+echo "  mode   : ${mode}"
+echo "Next: read ${target}/docs/ja/nvhpc_build_kit.md"
