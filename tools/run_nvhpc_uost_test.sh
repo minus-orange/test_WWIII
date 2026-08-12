@@ -51,11 +51,33 @@ run_program() {
   local ranks="$1"
   local log_file="$2"
   local program="$3"
+  local status
   if [[ "${mpi_exec_path}" == "none" ]]; then
-    "${bin_dir}/${program}" > "${log_file}" 2>&1
+    if "${bin_dir}/${program}" > "${log_file}" 2>&1; then
+      return 0
+    else
+      status=$?
+    fi
   else
-    "${mpi_exec_path}" -np "${ranks}" "${bin_dir}/${program}" > "${log_file}" 2>&1
+    if "${mpi_exec_path}" -np "${ranks}" "${bin_dir}/${program}" > "${log_file}" 2>&1; then
+      return 0
+    else
+      status=$?
+    fi
   fi
+
+  {
+    echo "finished_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "status=failed"
+    echo "failed_program=${program}"
+    echo "failed_exit_code=${status}"
+  } >> run-metadata.txt
+  echo "ERROR: ${program} failed with exit code ${status}" >&2
+  echo "  log: ${work_dir}/${log_file}" >&2
+  echo "--- ${program} log tail -------------------------------------------" >&2
+  tail -n 40 "${log_file}" >&2 || true
+  echo "-----------------------------------------------------------------" >&2
+  exit "${status}"
 }
 
 mkdir "${work_dir}"

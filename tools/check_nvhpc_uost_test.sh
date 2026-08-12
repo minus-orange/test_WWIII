@@ -58,6 +58,30 @@ require_file() {
 
 echo "Checking NVHPC UOST smoke test: ${work_dir}" | tee -a "${summary}"
 
+if ! grep -q '^status=completed$' "${work_dir}/run-metadata.txt" 2>/dev/null; then
+  failed_program="$(awk -F= '$1 == "failed_program" { value=$2 } END { print value }' \
+    "${work_dir}/run-metadata.txt" 2>/dev/null || true)"
+  failed_exit_code="$(awk -F= '$1 == "failed_exit_code" { value=$2 } END { print value }' \
+    "${work_dir}/run-metadata.txt" 2>/dev/null || true)"
+  if [[ -z "${failed_program}" ]]; then
+    for candidate in ww3_grid ww3_strt ww3_shel ww3_ounf; do
+      if [[ -s "${work_dir}/${candidate}.out" ]]; then
+        failed_program="${candidate}"
+      fi
+    done
+  fi
+  fail "run stopped before completion${failed_program:+ at ${failed_program}}${failed_exit_code:+ (exit ${failed_exit_code})}"
+  if [[ -n "${failed_program}" && -s "${work_dir}/${failed_program}.out" ]]; then
+    echo "--- ${failed_program} log tail -------------------------------------------"
+    tail -n 40 "${work_dir}/${failed_program}.out"
+    echo "-----------------------------------------------------------------"
+  fi
+  echo "checks_passed=0 checks_failed=${failures}"
+  echo "summary=${summary}"
+  echo "RESULT: FAIL (primary execution failure)" | tee -a "${summary}" >&2
+  exit 1
+fi
+
 for file in run-metadata.txt ww3_grid.out ww3_strt.out ww3_shel.out ww3_ounf.out \
   mod_def.ww3 restart.ww3 out_grd.ww3 out_pnt.ww3 log.ww3 ww3.200001.nc; do
   require_file "${file}"

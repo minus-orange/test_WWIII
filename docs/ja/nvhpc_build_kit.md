@@ -94,6 +94,10 @@ legacy build:
 共通patchには、ST4_UOSTでNVHPCが検出したWW3 7.14上流sourceの2件の不整合修正も
 含む。
 
+smoke testが途中停止した場合、実行scriptは停止LM、終了code、log末尾40行をその場で
+表示する。結果確認scriptも後続file欠落を多数列挙せず、一次障害1件と同じlog末尾だけを
+表示する。
+
 ## 適用後のコンパイル
 
 対象計算機でNVIDIA HPC SDKをloadして実行する。
