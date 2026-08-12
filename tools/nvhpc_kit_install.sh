@@ -89,26 +89,40 @@ else
   exit 1
 fi
 
-patches=(
-  "patches/common-ww3-7.14.patch"
-  "patches/legacy-ww3-7.14.patch"
+required_patches=("patches/legacy-ww3-7.14.patch")
+optional_patches=(
+  "patches/optional-w3grid-uost-ww3-7.14.patch"
+  "patches/optional-ww3-sbs1-ww3-7.14.patch"
 )
 overlays=("files/common" "files/legacy")
 
-declare -a patch_actions=()
-for relative_patch in "${patches[@]}"; do
+declare -a required_patch_actions=()
+for relative_patch in "${required_patches[@]}"; do
   patch_file="${kit_dir}/${relative_patch}"
   [[ -s "${patch_file}" ]] || { echo "ERROR: missing patch: ${patch_file}" >&2; exit 1; }
   if (cd "${target}" && git apply --check "${patch_file}" >/dev/null 2>&1); then
-    patch_actions+=("apply")
+    required_patch_actions+=("apply")
   elif (cd "${target}" && git apply --reverse --check "${patch_file}" >/dev/null 2>&1); then
-    patch_actions+=("skip")
+    required_patch_actions+=("skip")
   else
-    echo "ERROR: patch does not apply cleanly: ${relative_patch}" >&2
+    echo "ERROR: required NVHPC patch does not apply cleanly: ${relative_patch}" >&2
     echo "The target may be a different WW3 revision or contain overlapping edits." >&2
     (cd "${target}" && git apply --check "${patch_file}") || true
     echo "No source patches or support files were changed." >&2
     exit 1
+  fi
+done
+
+declare -a optional_patch_actions=()
+for relative_patch in "${optional_patches[@]}"; do
+  patch_file="${kit_dir}/${relative_patch}"
+  [[ -s "${patch_file}" ]] || { echo "ERROR: missing patch: ${patch_file}" >&2; exit 1; }
+  if (cd "${target}" && git apply --check "${patch_file}" >/dev/null 2>&1); then
+    optional_patch_actions+=("apply")
+  elif (cd "${target}" && git apply --reverse --check "${patch_file}" >/dev/null 2>&1); then
+    optional_patch_actions+=("skip")
+  else
+    optional_patch_actions+=("conflict")
   fi
 done
 
@@ -129,13 +143,29 @@ for overlay in "${overlays[@]}"; do
   done < <(find "${kit_dir}/${overlay}" -type f -print0 | sort -z)
 done
 
-for index in "${!patches[@]}"; do
-  if [[ "${patch_actions[$index]}" == "apply" ]]; then
-    echo "Applying ${patches[$index]}"
-    (cd "${target}" && git apply "${kit_dir}/${patches[$index]}")
+for index in "${!required_patches[@]}"; do
+  if [[ "${required_patch_actions[$index]}" == "apply" ]]; then
+    echo "Applying ${required_patches[$index]}"
+    (cd "${target}" && git apply "${kit_dir}/${required_patches[$index]}")
   else
-    echo "Already applied: ${patches[$index]}"
+    echo "Already applied: ${required_patches[$index]}"
   fi
+done
+
+for index in "${!optional_patches[@]}"; do
+  case "${optional_patch_actions[$index]}" in
+    apply)
+      echo "Applying optional fix: ${optional_patches[$index]}"
+      (cd "${target}" && git apply "${kit_dir}/${optional_patches[$index]}")
+      ;;
+    skip)
+      echo "Already applied: ${optional_patches[$index]}"
+      ;;
+    conflict)
+      echo "WARNING: skipped optional WW3 7.14 fix: ${optional_patches[$index]}" >&2
+      echo "         Target source differs; NVHPC support installation will continue." >&2
+      ;;
+  esac
 done
 
 for index in "${!overlay_sources[@]}"; do
@@ -146,4 +176,8 @@ done
 echo "NVHPC build support installed"
 echo "  target : ${target}"
 echo "  build  : WW3 legacy (w3_setup + w3_make; no CMake for WW3)"
+if printf '%s\n' "${optional_patch_actions[@]}" | grep -qx conflict; then
+  echo "  note   : one or more optional upstream fixes were skipped"
+  echo "           compile first; inspect diagnostics only if the affected LM fails"
+fi
 echo "Next: read ${target}/docs/ja/nvhpc_build_kit.md"

@@ -50,8 +50,11 @@ cp "${repo_dir}/tools/nvhpc_netcdf_config.sh" \
   "${output}/files/legacy/tools/nvhpc_netcdf_config.sh"
 
 git -C "${repo_dir}" diff --binary "${upstream_import}" HEAD -- \
-  model/src/w3gridmd.F90 model/src/ww3_sbs1.F90 \
-  > "${output}/patches/common-ww3-7.14.patch"
+  model/src/w3gridmd.F90 \
+  > "${output}/patches/optional-w3grid-uost-ww3-7.14.patch"
+git -C "${repo_dir}" diff --binary "${upstream_import}" HEAD -- \
+  model/src/ww3_sbs1.F90 \
+  > "${output}/patches/optional-ww3-sbs1-ww3-7.14.patch"
 git -C "${repo_dir}" diff --binary "${upstream_import}" HEAD -- \
   model/bin/ad3.tmpl model/bin/build_utils.sh model/bin/cmplr.env \
   model/bin/link.tmpl model/bin/w3_make model/bin/w3_setup \

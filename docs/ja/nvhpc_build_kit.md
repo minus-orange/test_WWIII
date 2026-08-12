@@ -1,7 +1,7 @@
 # NVHPC移植用ビルドキット
 
 生成済みarchiveは
-[`artifacts/ww3-nvhpc-legacy-kit-7b149b10.tar.gz`](../../artifacts/ww3-nvhpc-legacy-kit-7b149b10.tar.gz)
+[`artifacts/ww3-nvhpc-legacy-kit-0d41288d.tar.gz`](../../artifacts/ww3-nvhpc-legacy-kit-0d41288d.tar.gz)
 としてGitにも登録している。
 
 ## 目的
@@ -67,7 +67,10 @@ WW3_SOURCE_DIR/
 場合は、検出した`VERSION`と`w3_setup`のpathを短く表示する。
 
 適用前に全patchを`git apply --check`し、対象側の変更と衝突する場合は何も変更せず
-停止する。追加するsupport fileが既に異なる内容で存在する場合も停止する。
+停止する。ただし、NVHPC設定とは独立した`w3gridmd.F90`と`ww3_sbs1.F90`の上流
+不整合修正はoptional patchとして分離している。対象側の実装が異なる場合は警告して
+省略し、NVHPC legacy build環境の導入を継続する。追加するsupport fileが既に異なる
+内容で存在する場合は停止する。
 内容を確認して置換する場合だけ`--force`を指定する。`--force`でもsource patchの
 衝突は無視しない。
 
