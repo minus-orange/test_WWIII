@@ -81,7 +81,10 @@ fi
   xargs -0 "${checksum_command[@]}" > SHA256SUMS)
 
 archive="${output}.tar.gz"
-tar -czf "${archive}" -C "$(dirname "${output}")" "$(basename "${output}")"
+# Use ustar and disable macOS copyfile metadata so Linux tar does not create
+# AppleDouble (._*) files or warn about LIBARCHIVE.xattr headers.
+COPYFILE_DISABLE=1 tar --format ustar -czf "${archive}" \
+  -C "$(dirname "${output}")" "$(basename "${output}")"
 echo "NVHPC build kit created"
 echo "  directory : ${output}"
 echo "  archive   : ${archive}"

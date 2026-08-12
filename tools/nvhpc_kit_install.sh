@@ -43,12 +43,33 @@ done
 [[ -d "${target}" ]] || { echo "ERROR: directory not found: ${target}" >&2; exit 1; }
 target="$(cd "${target}" && pwd)"
 
-for required in VERSION model/bin model/src; do
-  [[ -e "${target}/${required}" ]] || {
-    echo "ERROR: not a WW3 source tree; missing ${target}/${required}" >&2
+is_ww3_root() {
+  [[ -f "$1/VERSION" && -d "$1/model/bin" && -d "$1/model/src" ]]
+}
+
+if ! is_ww3_root "${target}"; then
+  candidates=()
+  while IFS= read -r -d '' version_file; do
+    candidate="$(dirname "${version_file}")"
+    if is_ww3_root "${candidate}"; then
+      candidates+=("${candidate}")
+    fi
+  done < <(find "${target}" -mindepth 1 -maxdepth 4 -type f -name VERSION -print0)
+
+  if [[ ${#candidates[@]} -eq 1 ]]; then
+    echo "Detected nested WW3 source root: ${candidates[0]}"
+    target="${candidates[0]}"
+  else
+    echo "ERROR: WW3 source root must contain VERSION, model/bin, and model/src." >&2
+    echo "  specified: ${target}" >&2
+    echo "  VERSION files found:" >&2
+    find "${target}" -maxdepth 4 -type f -name VERSION -print 2>/dev/null | sed -n '1,5p' >&2
+    echo "  w3_setup files found:" >&2
+    find "${target}" -maxdepth 6 -type f -name w3_setup -print 2>/dev/null | sed -n '1,5p' >&2
+    echo "Specify the directory immediately above VERSION and model/." >&2
     exit 1
-  }
-done
+  fi
+fi
 version="$(tr -d '[:space:]' < "${target}/VERSION")"
 if [[ "${version}" != "7.14" ]]; then
   echo "ERROR: this kit targets WW3 7.14 (target reports '${version}')." >&2

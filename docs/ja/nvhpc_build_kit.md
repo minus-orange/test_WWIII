@@ -53,6 +53,19 @@ cd ww3-nvhpc-build-kit
 installerは最初に`SHA256SUMS`を自動検証する。Linuxでは`sha256sum`、macOS等では
 `shasum`を使用する。
 
+指定するsource rootには、少なくとも次の構成が必要である。
+
+```text
+WW3_SOURCE_DIR/
+├── VERSION
+└── model/
+    ├── bin/
+    └── src/
+```
+
+指定directoryの4階層以内にこの構成が1個だけある場合は自動検出する。見つからない
+場合は、検出した`VERSION`と`w3_setup`のpathを短く表示する。
+
 適用前に全patchを`git apply --check`し、対象側の変更と衝突する場合は何も変更せず
 停止する。追加するsupport fileが既に異なる内容で存在する場合も停止する。
 内容を確認して置換する場合だけ`--force`を指定する。`--force`でもsource patchの
