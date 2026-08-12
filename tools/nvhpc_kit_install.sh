@@ -6,24 +6,18 @@ kit_dir="${script_dir}"
 
 usage() {
   cat <<'EOF'
-Usage: ./install.sh [--mode all|cmake|legacy] [--force] WW3_SOURCE_DIR
+Usage: ./install.sh [--force] WW3_SOURCE_DIR
 
-Install the portable NVIDIA HPC SDK build support into a WW3 7.14 source tree.
-The default mode is all. --force only permits replacement of differing support
-files; it never forces a source patch that does not apply cleanly.
+Install the portable NVIDIA HPC SDK legacy build support into a WW3 7.14 source
+tree. --force only permits replacement of differing support files; it never
+forces a source patch that does not apply cleanly.
 EOF
 }
 
-mode="all"
 force="no"
 target=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --mode)
-      [[ $# -ge 2 ]] || { usage >&2; exit 2; }
-      mode="$2"
-      shift 2
-      ;;
     --force)
       force="yes"
       shift
@@ -45,10 +39,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "${mode}" in
-  all|cmake|legacy) ;;
-  *) echo "ERROR: --mode must be all, cmake, or legacy." >&2; exit 2 ;;
-esac
 [[ -n "${target}" ]] || { usage >&2; exit 2; }
 [[ -d "${target}" ]] || { echo "ERROR: directory not found: ${target}" >&2; exit 1; }
 target="$(cd "${target}" && pwd)"
@@ -78,16 +68,11 @@ else
   exit 1
 fi
 
-patches=("patches/common-ww3-7.14.patch")
-overlays=("files/common")
-if [[ "${mode}" == "all" || "${mode}" == "cmake" ]]; then
-  patches+=("patches/cmake-ww3-7.14.patch")
-  overlays+=("files/cmake")
-fi
-if [[ "${mode}" == "all" || "${mode}" == "legacy" ]]; then
-  patches+=("patches/legacy-ww3-7.14.patch")
-  overlays+=("files/legacy")
-fi
+patches=(
+  "patches/common-ww3-7.14.patch"
+  "patches/legacy-ww3-7.14.patch"
+)
+overlays=("files/common" "files/legacy")
 
 declare -a patch_actions=()
 for relative_patch in "${patches[@]}"; do
@@ -139,5 +124,5 @@ done
 
 echo "NVHPC build support installed"
 echo "  target : ${target}"
-echo "  mode   : ${mode}"
+echo "  build  : WW3 legacy (w3_setup + w3_make; no CMake for WW3)"
 echo "Next: read ${target}/docs/ja/nvhpc_build_kit.md"

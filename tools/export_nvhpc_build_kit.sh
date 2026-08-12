@@ -16,7 +16,6 @@ if [[ -e "${output}" ]]; then
 fi
 mkdir -p "${output}/patches" "${output}/files/common/tools" \
   "${output}/files/common/model/bin" "${output}/files/common/docs/ja" \
-  "${output}/files/cmake/tools" "${output}/files/cmake/cmake/toolchains" \
   "${output}/files/legacy/tools"
 output="$(cd "${output}" && pwd)"
 
@@ -45,10 +44,6 @@ cp "${repo_dir}/model/bin/switch_ST4_UOST" \
 cp "${repo_dir}/docs/ja/nvhpc_build_kit.md" \
   "${output}/files/common/docs/ja/nvhpc_build_kit.md"
 
-cp "${repo_dir}/tools/build_nvhpc.sh" "${output}/files/cmake/tools/build_nvhpc.sh"
-cp "${repo_dir}/cmake/toolchains/nvhpc-mpi.cmake" \
-  "${output}/files/cmake/cmake/toolchains/nvhpc-mpi.cmake"
-
 cp "${repo_dir}/tools/build_nvhpc_legacy.sh" \
   "${output}/files/legacy/tools/build_nvhpc_legacy.sh"
 cp "${repo_dir}/tools/nvhpc_netcdf_config.sh" \
@@ -57,9 +52,6 @@ cp "${repo_dir}/tools/nvhpc_netcdf_config.sh" \
 git -C "${repo_dir}" diff --binary "${upstream_import}" HEAD -- \
   model/src/w3gridmd.F90 model/src/ww3_sbs1.F90 \
   > "${output}/patches/common-ww3-7.14.patch"
-git -C "${repo_dir}" diff --binary "${upstream_import}" HEAD -- \
-  CMakeLists.txt model/src/CMakeLists.txt \
-  > "${output}/patches/cmake-ww3-7.14.patch"
 git -C "${repo_dir}" diff --binary "${upstream_import}" HEAD -- \
   model/bin/ad3.tmpl model/bin/build_utils.sh model/bin/cmplr.env \
   model/bin/link.tmpl model/bin/w3_make model/bin/w3_setup \
@@ -93,4 +85,4 @@ tar -czf "${archive}" -C "$(dirname "${output}")" "$(basename "${output}")"
 echo "NVHPC build kit created"
 echo "  directory : ${output}"
 echo "  archive   : ${archive}"
-echo "  install   : ${output}/install.sh --mode all /path/to/WW3"
+echo "  install   : ${output}/install.sh /path/to/WW3"
