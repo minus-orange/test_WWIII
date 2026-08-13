@@ -35,6 +35,7 @@ common_files=(
   tools/check_netcdf.f90
   tools/run_nvhpc_uost_test.sh
   tools/check_nvhpc_uost_test.sh
+  tools/select_legacy_build_tree.sh
 )
 for file in "${common_files[@]}"; do
   cp "${repo_dir}/${file}" "${output}/files/common/${file}"

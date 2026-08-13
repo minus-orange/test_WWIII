@@ -77,6 +77,8 @@ echo "  NetCDF   : ${netcdf_prefix}"
 echo "  switch   : switch_${switch_name}"
 echo "  scratch  : ${scratch_dir}"
 
+"${script_dir}/select_legacy_build_tree.sh" "${model_dir}" "${compiler_name}"
+
 "${model_dir}/bin/w3_setup" -q -c "${compiler_name}" -s "${switch_name}" \
   -t "${scratch_dir}" "${model_dir}"
 
@@ -107,4 +109,5 @@ if [[ ! -x "${model_dir}/exe/ww3_shel" ]]; then
 fi
 
 echo "Legacy build completed. Load modules are in ${model_dir}/exe"
-find "${model_dir}/exe" -maxdepth 1 -type f -perm -u+x -print | sort
+echo "Persistent NVHPC LM directory: ${model_dir}/.legacy-builds/${compiler_name}/exe"
+find "${model_dir}/exe/" -maxdepth 1 -type f -perm -u+x -print | sort

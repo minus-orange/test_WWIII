@@ -82,6 +82,7 @@ WW3_SOURCE_DIR/
 - `build_nvhpc_libraries.sh`: zlib、HDF5、NetCDF-C/FortranのNVHPC build
 - `nvhpc_library_versions.sh`: version、URL、checksum
 - `check_netcdf.f90`: `netcdf.mod`のcompile/link確認
+- `select_legacy_build_tree.sh`: compiler別のLM・object・module生成先切替
 - `switch_ST4_UOST`: 今回確認した物理switch
 - UOST smoke testの実行・結果確認script
 

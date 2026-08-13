@@ -81,8 +81,10 @@ download、展開source、build directory、install結果はいずれも削除�
 
 scriptは`ifx`、`icx`、MPI wrapper、NetCDF utilityを確認し、MPIと
 NetCDF-Fortranがともに`ifx`を使用していない場合はビルド前に停止する。
-生成LMは`model/exe`、中間生成物は`model/obj_MPI`、`model/mod_MPI`、
-`model/tmp-oneapi-legacy`に置かれる。
+ビルド中はWW3標準の`model/exe`、`model/obj_MPI`、`model/mod_MPI`を使用するが、
+これらはoneAPI専用の`model/.legacy-builds/oneapi`配下へのsymlinkである。
+oneAPI版LMの恒久的な場所は`model/.legacy-builds/oneapi/exe`である。
+`oneapi_debug`を指定した場合も別の`model/.legacy-builds/oneapi_debug`へ保存する。
 
 一部LMだけを確認する場合:
 
@@ -124,9 +126,11 @@ WW3_BIN_DIR="$PWD/model/exe" ./tools/run_nvhpc_uost_test.sh
 | scratch | `model/tmp-oneapi-legacy` | `model/tmp-nvhpc-legacy` |
 | compiler設定 | `oneapi` | `nvhpc` |
 
-`model/exe`、`model/obj_MPI`、`model/mod_MPI`はWW3標準の共通生成先なので、
-同一source treeでcompilerを切り替える場合は両compilerの生成物を混在させない。
-原則としてcompilerごとに別のcheckoutを使用する。
+`tools/select_legacy_build_tree.sh`がWW3標準の生成先をcompiler別directoryへ
+切り替える。NVHPC版は`model/.legacy-builds/nvhpc`、oneAPI版は
+`model/.legacy-builds/oneapi`に保持される。`model/exe`は最後に選択したcompilerの
+LM directoryを指す。更新前から存在する生成物はcompilerを推測せず、初回実行時に
+`model/.legacy-builds/unclassified-*`へ退避する。
 
 ## 制限事項
 

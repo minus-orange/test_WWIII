@@ -46,8 +46,12 @@ scriptは次を事前確認する。
 
 `cc`がmodule環境にない場合は、対象計算機のGCC moduleもloadする。
 
-生成先はWW3標準の`model/exe`である。中間生成物は`model/obj_MPI`、
-`model/mod_MPI`、`model/tmp-nvhpc-legacy`に置かれる。
+ビルド中はWW3標準の`model/exe`、`model/obj_MPI`、`model/mod_MPI`を使用するが、
+これらはNVHPC専用の`model/.legacy-builds/nvhpc`配下へのsymlinkである。
+実体をcompiler別に分離するため、oneAPI版を同じsource treeでビルドしても
+NVHPC版が誤って`up to date`と判定されたり上書きされたりしない。
+NVHPC版LMの恒久的な場所は`model/.legacy-builds/nvhpc/exe`である。
+`nvhpc_debug`を指定した場合も別の`model/.legacy-builds/nvhpc_debug`へ保存する。
 
 ## NetCDF config互換wrapper
 
@@ -114,6 +118,7 @@ WW3_BIN_DIR="$PWD/model/exe" ./tools/run_nvhpc_uost_test.sh
 | `ww3_trnc`のリンクで`makefile:... Error 2` | `ww3_trnc`が使用する`W3IOGRMD`と、`NL1`時の`W3ADATMD`が元のlegacy依存リストにない。最新版では依存を補正済み。build scriptは古い生成makefileだけを自動更新し、成功済みobjectは再利用する。`git pull`後、同じbuild scriptを先頭から再実行する。 |
 | `ww3_gint`のリンクで`w3iorsmd_w3iors_`が未解決 | restart補間処理で追加された`W3IORSMD`が元のlegacy依存リストにない。最新版では`ww3_gint`のlink対象へ追加済み。`git pull`後、同じbuild scriptを再実行する。 |
 | `ww3_sbs1`で`NDSE has not been explicitly declared`と`Label 140 ... never defined` | 上流のlabel文削除時に残った2箇所の不整合。エラー出力unitを宣言済みの`MDSE`へ修正し、`IOSTAT`で処理済みのREAD文から削除済みlabelへの分岐を除去している。 |
+| compilerを切り替えると全LMが`up to date`になる | 最新版では`model/.legacy-builds/<compiler>`へLM・object・moduleを分離する。更新前に存在した生成物は初回実行時に`unclassified-*`へ退避される。 |
 
 リンクに再度失敗した場合は、最新版では`*** error in linking ***`以降に実際の
 未解決symbol等が表示される。その末尾を写真で共有する。
