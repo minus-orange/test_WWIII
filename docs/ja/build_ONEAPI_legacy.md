@@ -83,6 +83,9 @@ download、展開source、build directory、install結果はいずれも削除�
 
 scriptは`ifx`、`icx`、MPI wrapper、NetCDF utilityを確認し、MPI wrapperと
 NetCDF-Fortranがともに`ifx`を使用していない場合はビルド前に停止する。
+また、`comp.oneapi`、`link.oneapi`、`ad3.oneapi`をWW3のtemplateから毎回生成する。
+このため、対象sourceの`w3_setup`が`oneapi`をtemplate生成対象として認識しない版でも、
+専用driver fileを優先してビルドできる。
 ビルド中はWW3標準の`model/exe`、`model/obj_MPI`、`model/mod_MPI`を使用するが、
 これらはoneAPI専用の`model/.legacy-builds/oneapi`配下へのsymlinkである。
 oneAPI版LMの恒久的な場所は`model/.legacy-builds/oneapi/exe`である。
@@ -135,6 +138,20 @@ WW3_BIN_DIR="$PWD/model/exe" ./tools/run_nvhpc_uost_test.sh
 `model/.legacy-builds/oneapi`に保持される。`model/exe`は最後に選択したcompilerの
 LM directoryを指す。更新前から存在する生成物はcompilerを推測せず、初回実行時に
 `model/.legacy-builds/unclassified-*`へ退避する。
+
+## `comp.oneapi not found`が表示される場合
+
+`build_oneapi_legacy.sh`だけが新しく、`prepare_oneapi_legacy_drivers.sh`がコピーされて
+いない場合に発生する。最新版ではビルド前に3個のoneAPI driver fileを自動生成する。
+リポジトリ全体を更新するか、少なくとも次を同時にコピーする。
+
+```text
+tools/build_oneapi_legacy.sh
+tools/prepare_oneapi_legacy_drivers.sh
+model/bin/comp.tmpl
+model/bin/link.tmpl
+model/bin/ad3.tmpl
+```
 
 ## 制限事項
 

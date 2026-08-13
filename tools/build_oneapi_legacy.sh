@@ -92,6 +92,7 @@ echo "  switches : switch_${shared_switch} (5 sequential LM)"
 echo "             switch_${parallel_switch} (ww3_shel MPI)"
 echo "  scratch  : ${scratch_dir}"
 
+"${script_dir}/prepare_oneapi_legacy_drivers.sh" "${model_dir}" "${compiler_name}"
 "${script_dir}/select_legacy_build_tree.sh" "${model_dir}" "${compiler_name}"
 "${script_dir}/prepare_legacy_program_set.sh" "${model_dir}" "${programs[@]}"
 
