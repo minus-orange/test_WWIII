@@ -2,17 +2,19 @@
 
 ## 概要
 
-Intel oneAPIの`ifx`とIntel MPIを使い、WW3標準の`w3_setup`、`w3_make`、
-生成Makefileで`switch_ST4_UOST`構成をビルドする。NVHPC版とは依存ライブラリの
-保存先と中間生成物を分離している。
+Intel oneAPIの`ifx`を使い、WW3標準の`w3_setup`、`w3_make`、生成Makefileで6本を
+ビルドする。前処理・後処理5本は`switch_ST4_UOST_SHRD`、MPI計算本体`ww3_shel`は
+`switch_ST4_UOST`を使用する。NVHPC版とは依存ライブラリ、LM、中間生成物を分離する。
 
 ```text
 oneAPI環境を有効化
   → 依存source archiveをダウンロード
   → icx/ifxで依存ライブラリを構築
+  → w3_setup -c oneapi -s ST4_UOST_SHRD
+  → w3_make ww3_grid ww3_strt ww3_prnc ww3_ounf ww3_ounp
   → w3_setup -c oneapi -s ST4_UOST
-  → w3_make
-  → model/exeにLM生成
+  → w3_make ww3_shel
+  → model/exeに6本のLMを保持
 ```
 
 WW3本体のビルドにはCMakeを使わない。zlib、HDF5、NetCDF-C、
@@ -40,8 +42,8 @@ icx --version
 mpiifx -show
 ```
 
-`mpiifx -show`の出力に`ifx`が含まれる必要がある。wrapper名が`mpifort`の場合は、
-以下の各WW3 build commandへ`WW3_ONEAPI_MPIFC=mpifort`を指定する。
+`ww3_shel`はMPI版なので、`mpiifx -show`の出力に`ifx`が含まれる必要がある。
+wrapper名が異なる場合は`WW3_ONEAPI_MPIFC=mpifort`などを指定する。
 
 ## 1. ライブラリsourceのダウンロード
 
@@ -79,19 +81,21 @@ download、展開source、build directory、install結果はいずれも削除�
 ./tools/build_oneapi_legacy.sh
 ```
 
-scriptは`ifx`、`icx`、MPI wrapper、NetCDF utilityを確認し、MPIと
+scriptは`ifx`、`icx`、MPI wrapper、NetCDF utilityを確認し、MPI wrapperと
 NetCDF-Fortranがともに`ifx`を使用していない場合はビルド前に停止する。
 ビルド中はWW3標準の`model/exe`、`model/obj_MPI`、`model/mod_MPI`を使用するが、
 これらはoneAPI専用の`model/.legacy-builds/oneapi`配下へのsymlinkである。
 oneAPI版LMの恒久的な場所は`model/.legacy-builds/oneapi/exe`である。
 `oneapi_debug`を指定した場合も別の`model/.legacy-builds/oneapi_debug`へ保存する。
 
-一部LMだけを確認する場合:
+既定で次の6本を生成する。
 
 ```bash
-WW3_LEGACY_PROGRAMS="ww3_grid ww3_strt ww3_shel ww3_ounf" \
-  ./tools/build_oneapi_legacy.sh
+./tools/build_oneapi_legacy.sh
+# ww3_grid ww3_strt ww3_prnc ww3_ounf ww3_ounp ww3_shel
 ```
+
+これ以外の古いWW3 LMはoneAPI側の`exe`ディレクトリから除外される。
 
 debug build:
 
@@ -121,7 +125,7 @@ WW3_BIN_DIR="$PWD/model/exe" ./tools/run_nvhpc_uost_test.sh
 |---|---|---|
 | Fortran | `ifx` | `nvfortran` |
 | C | `icx` | `nvc` |
-| MPI | `mpiifx` | `mpifort`（HPC-X） |
+| MPI | `mpiifx`（`ww3_shel`のみ） | `mpifort`（`ww3_shel`のみ） |
 | ライブラリ | `external/oneapi-libs` | `external/nvhpc-libs` |
 | scratch | `model/tmp-oneapi-legacy` | `model/tmp-nvhpc-legacy` |
 | compiler設定 | `oneapi` | `nvhpc` |

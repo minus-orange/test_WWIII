@@ -8,10 +8,14 @@ library_root="${WW3_LIB_ROOT:-${repo_dir}/external/oneapi-libs}"
 netcdf_prefix="${WW3_NETCDF_ROOT:-${WW3_LIB_PREFIX:-${library_root}/install}}"
 nc_config="${WW3_NC_CONFIG:-${netcdf_prefix}/bin/nc-config}"
 nf_config="${WW3_NF_CONFIG:-${netcdf_prefix}/bin/nf-config}"
-switch_name="${WW3_LEGACY_SWITCH:-ST4_UOST}"
+shared_switch="${WW3_SHARED_SWITCH:-ST4_UOST_SHRD}"
+parallel_switch="${WW3_PARALLEL_SWITCH:-ST4_UOST}"
 compiler_name="${WW3_LEGACY_COMPILER:-oneapi}"
 scratch_dir="${WW3_LEGACY_TMP:-${model_dir}/tmp-oneapi-legacy}"
 jobs="${WW3_JOBS:-4}"
+shared_programs=(ww3_grid ww3_strt ww3_prnc ww3_ounf ww3_ounp)
+parallel_programs=(ww3_shel)
+programs=("${shared_programs[@]}" "${parallel_programs[@]}")
 
 case "${repo_dir}" in
   *[[:space:]]*)
@@ -41,8 +45,21 @@ for config in "${nc_config}" "${nf_config}"; do
     exit 1
   fi
 done
-if [[ ! -r "${model_dir}/bin/switch_${switch_name}" ]]; then
-  echo "ERROR: switch file was not found: model/bin/switch_${switch_name}" >&2
+for switch_name in "${shared_switch}" "${parallel_switch}"; do
+  if [[ ! -r "${model_dir}/bin/switch_${switch_name}" ]]; then
+    echo "ERROR: switch file was not found: model/bin/switch_${switch_name}" >&2
+    exit 1
+  fi
+done
+if ! grep -qw SHRD "${model_dir}/bin/switch_${shared_switch}" ||
+   grep -Eqw 'DIST|MPI' "${model_dir}/bin/switch_${shared_switch}"; then
+  echo "ERROR: switch_${shared_switch} must contain SHRD and omit DIST/MPI." >&2
+  exit 1
+fi
+if ! grep -qw DIST "${model_dir}/bin/switch_${parallel_switch}" ||
+   ! grep -qw MPI "${model_dir}/bin/switch_${parallel_switch}" ||
+   grep -qw SHRD "${model_dir}/bin/switch_${parallel_switch}"; then
+  echo "ERROR: switch_${parallel_switch} must contain DIST MPI and omit SHRD." >&2
   exit 1
 fi
 
@@ -71,34 +88,41 @@ echo "  source   : ${model_dir}"
 echo "  compiler : ${compiler_name} ($(command -v ifx))"
 echo "  MPI      : $(command -v "${mpi_fc}")"
 echo "  NetCDF   : ${netcdf_prefix}"
-echo "  switch   : switch_${switch_name}"
+echo "  switches : switch_${shared_switch} (5 sequential LM)"
+echo "             switch_${parallel_switch} (ww3_shel MPI)"
 echo "  scratch  : ${scratch_dir}"
 
 "${script_dir}/select_legacy_build_tree.sh" "${model_dir}" "${compiler_name}"
+"${script_dir}/prepare_legacy_program_set.sh" "${model_dir}" "${programs[@]}"
 
-"${model_dir}/bin/w3_setup" -q -c "${compiler_name}" -s "${switch_name}" \
-  -t "${scratch_dir}" "${model_dir}"
+build_program_group() {
+  local switch_name="$1"
+  shift
+  local group_programs=("$@")
 
-echo "Refreshing WW3 legacy generated makefiles"
-for generated_makefile in \
-  "${model_dir}/src/makefile" "${model_dir}/src/makefile_SEQ" \
-  "${model_dir}/src/makefile_OMP" "${model_dir}/src/makefile_MPI" \
-  "${model_dir}/src/makefile_HYB"
-do
-  rm -f "${generated_makefile}"
+  echo "Building with switch_${switch_name}: ${group_programs[*]}"
+  "${model_dir}/bin/w3_setup" -q -c "${compiler_name}" -s "${switch_name}" \
+    -t "${scratch_dir}" "${model_dir}"
+
+  for generated_makefile in \
+    "${model_dir}/src/makefile" "${model_dir}/src/makefile_SEQ" \
+    "${model_dir}/src/makefile_OMP" "${model_dir}/src/makefile_MPI" \
+    "${model_dir}/src/makefile_HYB"
+  do
+    rm -f "${generated_makefile}"
+  done
+  "${model_dir}/bin/w3_make" "${group_programs[@]}"
+}
+
+build_program_group "${shared_switch}" "${shared_programs[@]}"
+build_program_group "${parallel_switch}" "${parallel_programs[@]}"
+
+for program in "${programs[@]}"; do
+  if [[ ! -x "${model_dir}/exe/${program}" ]]; then
+    echo "ERROR: legacy build finished without model/exe/${program}." >&2
+    exit 1
+  fi
 done
-
-if [[ -n "${WW3_LEGACY_PROGRAMS:-}" ]]; then
-  read -r -a programs <<< "${WW3_LEGACY_PROGRAMS}"
-  "${model_dir}/bin/w3_make" "${programs[@]}"
-else
-  "${model_dir}/bin/w3_make"
-fi
-
-if [[ ! -x "${model_dir}/exe/ww3_shel" ]]; then
-  echo "ERROR: legacy build finished without model/exe/ww3_shel." >&2
-  exit 1
-fi
 echo "Intel oneAPI legacy build completed. Load modules are in ${model_dir}/exe"
 echo "Persistent oneAPI LM directory: ${model_dir}/.legacy-builds/${compiler_name}/exe"
-find "${model_dir}/exe/" -maxdepth 1 -type f -perm -u+x -print | sort
+printf '  %s\n' "${programs[@]}"

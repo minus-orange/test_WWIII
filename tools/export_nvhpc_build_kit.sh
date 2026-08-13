@@ -36,12 +36,15 @@ common_files=(
   tools/run_nvhpc_uost_test.sh
   tools/check_nvhpc_uost_test.sh
   tools/select_legacy_build_tree.sh
+  tools/prepare_legacy_program_set.sh
 )
 for file in "${common_files[@]}"; do
   cp "${repo_dir}/${file}" "${output}/files/common/${file}"
 done
 cp "${repo_dir}/model/bin/switch_ST4_UOST" \
   "${output}/files/common/model/bin/switch_ST4_UOST"
+cp "${repo_dir}/model/bin/switch_ST4_UOST_SHRD" \
+  "${output}/files/common/model/bin/switch_ST4_UOST_SHRD"
 cp "${repo_dir}/docs/ja/nvhpc_build_kit.md" \
   "${output}/files/common/docs/ja/nvhpc_build_kit.md"
 

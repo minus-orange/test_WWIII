@@ -83,7 +83,9 @@ WW3_SOURCE_DIR/
 - `nvhpc_library_versions.sh`: version、URL、checksum
 - `check_netcdf.f90`: `netcdf.mod`のcompile/link確認
 - `select_legacy_build_tree.sh`: compiler別のLM・object・module生成先切替
+- `prepare_legacy_program_set.sh`: 指定LMだけを生成・保持するための事前整理
 - `switch_ST4_UOST`: 今回確認した物理switch
+- `switch_ST4_UOST_SHRD`: 前処理・後処理用の非MPI switch
 - UOST smoke testの実行・結果確認script
 
 legacy build:

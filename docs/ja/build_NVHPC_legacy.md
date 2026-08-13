@@ -3,15 +3,15 @@
 ## 概要
 
 WW3標準の`w3_setup`、`w3_make`、生成Makefileを使い、CMakeを使用せずに
-`switch_ST4_UOST`構成をビルドする。既存のCMake版とは独立した選択肢であり、
-物理switchと使用ライブラリは同じである。
+NVHPCで6本のLMを作成する。前処理・後処理5本は`switch_ST4_UOST_SHRD`、MPI計算本体
+`ww3_shel`は`switch_ST4_UOST`を使用する。既存のCMake版とは独立した選択肢である。
 
 ```text
+w3_setup -c nvhpc -s ST4_UOST_SHRD
+  → w3_make ww3_grid ww3_strt ww3_prnc ww3_ounf ww3_ounp
 w3_setup -c nvhpc -s ST4_UOST
-  → comp/link/ad3生成
-  → switch設定
-  → w3_make
-  → model/exeにLM生成
+  → w3_make ww3_shel
+  → model/exeに6本を保持
 ```
 
 legacy scriptの制約により、リポジトリの絶対パスに空白を含めることはできない。
@@ -84,14 +84,14 @@ WW3_NETCDF_ROOT=/path/to/nvhpc-netcdf \
 WW3_JOBS=16 ./tools/build_nvhpc_legacy.sh
 ```
 
-一部LMだけを先に確認する場合:
+既定で次の6本を生成する。
 
 ```bash
-WW3_LEGACY_PROGRAMS="ww3_grid ww3_strt ww3_shel ww3_ounf" \
-  ./tools/build_nvhpc_legacy.sh
+./tools/build_nvhpc_legacy.sh
+# ww3_grid ww3_strt ww3_prnc ww3_ounf ww3_ounp ww3_shel
 ```
 
-既定は`w3_make`が選択する全LMをビルドする。
+これ以外の古いWW3 LMは、このcompilerの`exe`ディレクトリから除外される。
 
 debug buildでは次を指定する。
 

@@ -43,6 +43,30 @@ W3_UOST W3_PR3 W3_UQ W3_LN1 W3_ST4 W3_NL1 W3_BT1
 W3_IC0 W3_IS1 W3_REF0 W3_NC4 W3_DIST W3_MPI ...
 ```
 
+## 実行ファイル別のswitch
+
+計算本体`ww3_shel`は従来のMPI版`switch_ST4_UOST`を使用する。前処理・後処理の
+5本には、同じ物理・入出力機能から`DIST MPI`を除き`SHRD`へ置換した
+[`model/bin/switch_ST4_UOST_SHRD`](../../model/bin/switch_ST4_UOST_SHRD)を使用する。
+
+```text
+UOST NOPA PR3 UQ FLX0 LN1 ST4 NL1 BT1 IC0 IS1 REF0 DB0 MLIM TR0 BS0 XX0 WNX1 WNT1 CRX1 CRT1 LRB4 O0 O1 O2 O3 O4 O5 O6 O7 O11 MLIM F90 NOGRB NC4 SHRD
+```
+
+NVHPC版とoneAPI版の両方で、次の同じ6本を作成する。
+
+| 実行ファイル | switch | MPI |
+|---|---|---|
+| `ww3_grid` | `ST4_UOST_SHRD` | なし |
+| `ww3_strt` | `ST4_UOST_SHRD` | なし |
+| `ww3_prnc` | `ST4_UOST_SHRD` | なし |
+| `ww3_shel` | `ST4_UOST` | あり |
+| `ww3_ounf` | `ST4_UOST_SHRD` | なし |
+| `ww3_ounp` | `ST4_UOST_SHRD` | なし |
+
+元のswitchに`PDLIB`は含まれないため、`ww3_prnc`のSHRD版にも`PDLIB`は入らない。
+`force_pdlib=1`に相当する別構成からswitchを作る場合も`PDLIB`を除く。
+
 実際のビルド定義は、ビルド後の
 `build/model/src/CMakeFiles/ww3_lib.dir/flags.make`で確認できます。
 `build`ディレクトリは生成物のためGit管理対象外です。
