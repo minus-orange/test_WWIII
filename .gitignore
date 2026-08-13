@@ -1,5 +1,6 @@
 watch3.env
 external/nvhpc-libs/
+external/oneapi-libs/
 cases
 data_regtests
 smc_docs/*.pdf 
@@ -172,6 +173,7 @@ model/obj_*/
 model/mod/
 model/mod_*/
 model/tmp-nvhpc-legacy/
+model/tmp-oneapi-legacy/
 model/src/makefile
 model/src/makefile_*
 *.swp
