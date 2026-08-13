@@ -1,7 +1,7 @@
 # NVHPC移植用ビルドキット
 
 生成済みarchiveは
-[`artifacts/ww3-nvhpc-legacy-kit-52c6b817.tar.gz`](../../artifacts/ww3-nvhpc-legacy-kit-52c6b817.tar.gz)
+[`artifacts/ww3-nvhpc-legacy-kit-cfdb8daf.tar.gz`](../../artifacts/ww3-nvhpc-legacy-kit-cfdb8daf.tar.gz)
 としてGitにも登録している。
 
 ## 目的
