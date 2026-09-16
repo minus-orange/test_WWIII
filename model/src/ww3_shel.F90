@@ -283,6 +283,9 @@ PROGRAM W3SHEL
   USE W3IORSMD, ONLY: OARST
   USE W3SERVMD, ONLY : NEXTLN, EXTCDE, EXTOPN, EXTIOF
   USE W3TIMEMD
+#ifdef WW3_ENABLE_TIMER
+  USE MOD_TIMER, ONLY: RESET_TIMER, START_TIMER, STOP_TIMER, PRINT_TIMER
+#endif
 
 #ifdef W3_OASIS
   USE W3OACPMD, ONLY: CPL_OASIS_INIT, CPL_OASIS_GRID,            &
@@ -379,6 +382,9 @@ PROGRAM W3SHEL
   !
   LOGICAL             :: FLLSTL, FLLSTI, FLLSTR, FLFLG, FLHOM,     &
        TFLAGI, PRTFRM, FLAGSCI, FLGNML
+#ifdef WW3_ENABLE_TIMER
+  LOGICAL             :: TIMER_FINALIZE_READY = .FALSE.
+#endif
   LOGICAL             :: FLGRD(NOGRP,NGRPP), FLGD(NOGRP),          &
        FLGR2(NOGRP,NGRPP), FLG2(NOGRP),          &
        FLAGSTIDE(4), FLH(-7:10), FLGDAS(3),      &
@@ -434,6 +440,11 @@ PROGRAM W3SHEL
 #endif
   !
   CALL DATE_AND_TIME ( VALUES=CLKDT1 )
+#ifdef WW3_ENABLE_TIMER
+  CALL RESET_TIMER()
+  CALL START_TIMER('initialize')
+  CALL START_TIMER('data_structure_setup')
+#endif
   !
   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ! 0.  Set up data structures
@@ -453,6 +464,9 @@ PROGRAM W3SHEL
   CALL W3SETA ( 1, 6, 6 )
   CALL W3SETO ( 1, 6, 6 )
   CALL W3SETI ( 1, 6, 6 )
+#ifdef WW3_ENABLE_TIMER
+  CALL STOP_TIMER('data_structure_setup')
+#endif
 
   memunit = 740+IAPROC
   call print_memcheck(memunit, 'memcheck_____:'//' WW3_SHEL SECTION 1')
@@ -466,6 +480,9 @@ PROGRAM W3SHEL
   FLHYBR = .TRUE.
 #endif
 
+#ifdef WW3_ENABLE_TIMER
+  CALL START_TIMER('mpi_setup')
+#endif
 #ifdef W3_OASIS
   IF (OASISED.EQ.1) THEN
     CALL CPL_OASIS_INIT(MPICOMM)
@@ -497,6 +514,9 @@ PROGRAM W3SHEL
   CALL MPI_COMM_RANK ( MPICOMM, IAPROC, IERR_MPI )
   IAPROC = IAPROC + 1
 #endif
+#ifdef WW3_ENABLE_TIMER
+  CALL STOP_TIMER('mpi_setup')
+#endif
   memunit = 740+IAPROC
   !
 #ifdef W3_NCO
@@ -504,6 +524,9 @@ PROGRAM W3SHEL
   !                         ('WAVEFCST',1998,0007,0050,'NP21   ')
 #endif
   call print_memcheck(memunit, 'memcheck_____:'//' WW3_SHEL SECTION 2')
+#ifdef WW3_ENABLE_TIMER
+  CALL START_TIMER('configuration_io')
+#endif
   !
   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ! 1.  IO set-up
@@ -1915,6 +1938,10 @@ PROGRAM W3SHEL
   END IF
   !
   call print_memcheck(memunit, 'memcheck_____:'//' WW3_SHEL SECTION 5')
+#ifdef WW3_ENABLE_TIMER
+  CALL STOP_TIMER('configuration_io')
+  CALL START_TIMER('model_initialize')
+#endif
   !
   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ! 5.  Initializations
@@ -1991,6 +2018,12 @@ PROGRAM W3SHEL
   END IF
 #endif
 
+#ifdef WW3_ENABLE_TIMER
+  CALL STOP_TIMER('model_initialize')
+  CALL STOP_TIMER('initialize')
+  CALL START_TIMER('timestep_loop')
+#endif
+
   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ! 6.  Model without input
   !
@@ -2015,6 +2048,10 @@ PROGRAM W3SHEL
 #endif
         )
     !
+#ifdef WW3_ENABLE_TIMER
+    CALL STOP_TIMER('timestep_loop')
+    TIMER_FINALIZE_READY = .TRUE.
+#endif
     CALL FINALISE(MPICOMM, IERR_MPI, NDSO, NDS(1), CLKDT1, CLKDT2)
     !
   END IF
@@ -2043,6 +2080,9 @@ PROGRAM W3SHEL
 
   ! 700 timestepping
   DO WHILE ( DTTST .GT. 0.)
+#ifdef WW3_ENABLE_TIMER
+    CALL START_TIMER('input_update')
+#endif
     !
     !
     ! 7.a Determine next time interval and input fields
@@ -2580,6 +2620,9 @@ PROGRAM W3SHEL
     ! 7.b Run the wave model for the given interval
     !
     TIME0  = TTIME
+#ifdef WW3_ENABLE_TIMER
+    CALL STOP_TIMER('input_update')
+#endif
     !
     CALL W3WAVE ( 1, ODAT, TIME0                                    &
 #ifdef W3_OASIS
@@ -2616,7 +2659,13 @@ PROGRAM W3SHEL
       FLGDAS(2) = DSEC21(TIME,T1N) .EQ. 0.
       FLGDAS(3) = DSEC21(TIME,T2N) .EQ. 0.
       !
+#ifdef WW3_ENABLE_TIMER
+      CALL START_TIMER('data_assimilation')
+#endif
       CALL W3WDAS ( FLGDAS, RCLD, NDT, DATA0, DATA1, DATA2 )
+#ifdef WW3_ENABLE_TIMER
+      CALL STOP_TIMER('data_assimilation')
+#endif
       !
       ! 7.d Call wave model again after data assimilation for output only
       !
@@ -2638,6 +2687,10 @@ PROGRAM W3SHEL
 
     DTTST  = DSEC21 ( TIME0 , TIMEN )
   END DO  ! timestepping
+#ifdef WW3_ENABLE_TIMER
+  CALL STOP_TIMER('timestep_loop')
+  TIMER_FINALIZE_READY = .TRUE.
+#endif
   !
   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   !     End of shel
@@ -2897,10 +2950,21 @@ CONTAINS
     REAL                  :: CLKFIN, CLKFEL
     INTEGER               :: CLKDT3(8)
 
+#ifdef WW3_ENABLE_TIMER
+    IF (TIMER_FINALIZE_READY) THEN
+      CALL START_TIMER('finalize')
+      CALL START_TIMER('final_barrier')
+    END IF
+#endif
+
 #ifdef W3_MPI
     CALL MPI_BARRIER ( MPICOMM_IN, IERR_MPI )
 #else 
     IERR_MPI=0
+#endif
+#ifdef WW3_ENABLE_TIMER
+    IF (TIMER_FINALIZE_READY) CALL STOP_TIMER('final_barrier')
+    IF (TIMER_FINALIZE_READY) CALL START_TIMER('final_report')
 #endif
     !
     IF ( IAPROC .EQ. NAPOUT ) THEN
@@ -2915,6 +2979,13 @@ CONTAINS
       END IF
       WRITE (NDSO,999)
     END IF
+#ifdef WW3_ENABLE_TIMER
+    IF (TIMER_FINALIZE_READY) THEN
+      CALL STOP_TIMER('final_report')
+      CALL STOP_TIMER('finalize')
+      CALL PRINT_TIMER()
+    END IF
+#endif
     !
 #ifdef W3_NCO
 !    IF ( IAPROC .EQ. 1 ) CALL W3TAGE('WAVEFCST')

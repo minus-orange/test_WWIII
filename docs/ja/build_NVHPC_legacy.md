@@ -53,6 +53,23 @@ NVHPC版が誤って`up to date`と判定されたり上書きされたりしな
 NVHPC版LMの恒久的な場所は`model/.legacy-builds/nvhpc/exe`である。
 `nvhpc_debug`を指定した場合も別の`model/.legacy-builds/nvhpc_debug`へ保存する。
 
+## 階層タイマー
+
+`ww3_shel`の階層タイマーは既定で有効であり、build時に
+`-DWW3_ENABLE_TIMER`が追加される。最大3階層で`initialize`、
+`timestep_loop`、`finalize`と、`W3WAVE`内のsource項・伝播・出力等を測定する。
+
+```bash
+# 既定（タイマー有効）
+WW3_ENABLE_TIMER=ON ./tools/build_nvhpc_legacy.sh
+
+# タイマーをコンパイルから除外
+WW3_ENABLE_TIMER=OFF ./tools/build_nvhpc_legacy.sh
+```
+
+切替時は関係objectだけを自動的に再コンパイルする。Region一覧、出力形式、
+MPI集計値の読み方は[階層タイマー](nvhpc_timer.md)を参照する。
+
 ## NetCDF config互換wrapper
 
 WW3 legacy buildは1個の`NETCDF_CONFIG`に対して、NetCDF-Cの`--libs`と

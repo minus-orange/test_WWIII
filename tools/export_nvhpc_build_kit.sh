@@ -16,6 +16,7 @@ if [[ -e "${output}" ]]; then
 fi
 mkdir -p "${output}/patches" "${output}/files/common/tools" \
   "${output}/files/common/model/bin" "${output}/files/common/docs/ja" \
+  "${output}/files/common/model/src" \
   "${output}/files/legacy/tools"
 output="$(cd "${output}" && pwd)"
 
@@ -45,8 +46,12 @@ cp "${repo_dir}/model/bin/switch_ST4_UOST" \
   "${output}/files/common/model/bin/switch_ST4_UOST"
 cp "${repo_dir}/model/bin/switch_ST4_UOST_SHRD" \
   "${output}/files/common/model/bin/switch_ST4_UOST_SHRD"
+cp "${repo_dir}/model/src/mod_timer.F90" \
+  "${output}/files/common/model/src/mod_timer.F90"
 cp "${repo_dir}/docs/ja/nvhpc_build_kit.md" \
   "${output}/files/common/docs/ja/nvhpc_build_kit.md"
+cp "${repo_dir}/docs/ja/nvhpc_timer.md" \
+  "${output}/files/common/docs/ja/nvhpc_timer.md"
 
 cp "${repo_dir}/tools/build_nvhpc_legacy.sh" \
   "${output}/files/legacy/tools/build_nvhpc_legacy.sh"
@@ -61,7 +66,8 @@ git -C "${repo_dir}" diff --binary "${upstream_import}" HEAD -- \
   > "${output}/patches/optional-ww3-sbs1-ww3-7.14.patch"
 git -C "${repo_dir}" diff --binary "${upstream_import}" HEAD -- \
   model/bin/ad3.tmpl model/bin/build_utils.sh model/bin/cmplr.env \
-  model/bin/link.tmpl model/bin/w3_make model/bin/w3_setup \
+  model/bin/link.tmpl model/bin/make_makefile.sh model/bin/w3_make model/bin/w3_setup \
+  model/src/ww3_shel.F90 model/src/w3wavemd.F90 \
   > "${output}/patches/legacy-ww3-7.14.patch"
 
 chmod +x "${output}/install.sh"

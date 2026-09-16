@@ -1,0 +1,337 @@
+! Timing utility adapted for WAVEWATCH III.
+!
+! Source:
+!   https://github.com/minus-orange/test_tddft/blob/
+!     tddft-openacc-residency/FPSEID21/tddft_2022October/mod_timer.f90
+! Source revision:
+!   2e9c92b3c2391832b7d0137b201486c394bcd630
+!
+! The FPSEID-specific external wrappers and diagnostic report were removed.
+! The module interface (reset_timer, start_timer, stop_timer, print_timer)
+! and MPI max/average aggregation are retained.  WW3 instrumentation is
+! deliberately limited to three active timer regions.
+MODULE MOD_TIMER
+  USE MPI
+  IMPLICIT NONE
+
+  INTEGER, PRIVATE, PARAMETER :: NUM_MAX_ROUTINES = 192
+  INTEGER, PRIVATE, PARAMETER :: NUM_MAX_TREE_NODES = 512
+  INTEGER, PRIVATE, PARAMETER :: NUM_MAX_NAMELEN = 100
+  INTEGER, PRIVATE, PARAMETER :: MAX_TIMER_NESTING = 3
+
+  INTEGER, PRIVATE :: NUM_OF_ROUTINES = 0
+  INTEGER, PRIVATE :: NUM_TREE_NODES = 0
+  INTEGER, PRIVATE :: TIMER_STACK_DEPTH = 0
+
+  CHARACTER(LEN=NUM_MAX_NAMELEN), PRIVATE :: T_NAME(NUM_MAX_ROUTINES) = ''
+  REAL(KIND=8), PRIVATE :: TS(NUM_MAX_ROUTINES) = 0.0D0
+  REAL(KIND=8), PRIVATE :: T_VALUE(NUM_MAX_ROUTINES) = 0.0D0
+  INTEGER, PRIVATE :: CALL_COUNT(NUM_MAX_ROUTINES) = 0
+  LOGICAL, PRIVATE :: TIMER_RUNNING(NUM_MAX_ROUTINES) = .FALSE.
+  INTEGER, PRIVATE :: ACTIVE_TREE_NODE(NUM_MAX_ROUTINES) = 0
+
+  INTEGER, PRIVATE :: TREE_NAME_INDEX(NUM_MAX_TREE_NODES) = 0
+  INTEGER, PRIVATE :: TREE_PARENT(NUM_MAX_TREE_NODES) = 0
+  INTEGER, PRIVATE :: TREE_DEPTH(NUM_MAX_TREE_NODES) = 0
+  INTEGER, PRIVATE :: TREE_CALL_COUNT(NUM_MAX_TREE_NODES) = 0
+  REAL(KIND=8), PRIVATE :: TREE_TS(NUM_MAX_TREE_NODES) = 0.0D0
+  REAL(KIND=8), PRIVATE :: TREE_VALUE(NUM_MAX_TREE_NODES) = 0.0D0
+  INTEGER, PRIVATE :: TIMER_STACK(MAX_TIMER_NESTING) = 0
+
+  PRIVATE :: WALLCLOCK, FIND_OR_ADD_TREE_NODE, PRINT_TIMER_TREE
+
+CONTAINS
+
+  SUBROUTINE RESET_TIMER()
+    NUM_OF_ROUTINES = 0
+    T_NAME = ''
+    TS = 0.0D0
+    T_VALUE = 0.0D0
+    CALL_COUNT = 0
+    TIMER_RUNNING = .FALSE.
+    ACTIVE_TREE_NODE = 0
+    NUM_TREE_NODES = 0
+    TREE_NAME_INDEX = 0
+    TREE_PARENT = 0
+    TREE_DEPTH = 0
+    TREE_CALL_COUNT = 0
+    TREE_TS = 0.0D0
+    TREE_VALUE = 0.0D0
+    TIMER_STACK_DEPTH = 0
+    TIMER_STACK = 0
+  END SUBROUTINE RESET_TIMER
+
+  SUBROUTINE START_TIMER(REGION_NAME)
+    CHARACTER(LEN=*), INTENT(IN) :: REGION_NAME
+    INTEGER :: I, NAME_INDEX, NLEN, NODE_INDEX, PARENT_INDEX
+    REAL(KIND=8) :: T_START
+
+    NLEN = MIN(LEN_TRIM(REGION_NAME), NUM_MAX_NAMELEN)
+    IF (NLEN <= 0) THEN
+      WRITE(0,*) 'Timer region name must not be empty.'
+      RETURN
+    END IF
+    IF (TIMER_STACK_DEPTH >= MAX_TIMER_NESTING) THEN
+      WRITE(0,*) 'Timer nesting exceeds maximum depth ', &
+        MAX_TIMER_NESTING, ': ', TRIM(REGION_NAME)
+      RETURN
+    END IF
+
+    NAME_INDEX = 0
+    DO I = 1, NUM_OF_ROUTINES
+      IF (REGION_NAME(1:NLEN) == TRIM(T_NAME(I))) THEN
+        IF (TIMER_RUNNING(I)) THEN
+          WRITE(0,*) 'Timer for ', TRIM(REGION_NAME), &
+            ' is already started.'
+          RETURN
+        END IF
+        NAME_INDEX = I
+        EXIT
+      END IF
+    END DO
+
+    IF (NAME_INDEX == 0) THEN
+      IF (NUM_OF_ROUTINES >= NUM_MAX_ROUTINES) THEN
+        WRITE(0,*) 'Timer table is full: ', TRIM(REGION_NAME)
+        RETURN
+      END IF
+      NUM_OF_ROUTINES = NUM_OF_ROUTINES + 1
+      NAME_INDEX = NUM_OF_ROUTINES
+      T_NAME(NAME_INDEX) = REGION_NAME(1:NLEN)
+    END IF
+
+    PARENT_INDEX = 0
+    IF (TIMER_STACK_DEPTH > 0) THEN
+      PARENT_INDEX = TIMER_STACK(TIMER_STACK_DEPTH)
+    END IF
+    CALL FIND_OR_ADD_TREE_NODE(NAME_INDEX, PARENT_INDEX, NODE_INDEX)
+    IF (NODE_INDEX == 0) RETURN
+
+    CALL WALLCLOCK(T_START)
+    TIMER_RUNNING(NAME_INDEX) = .TRUE.
+    CALL_COUNT(NAME_INDEX) = CALL_COUNT(NAME_INDEX) + 1
+    TS(NAME_INDEX) = T_START
+    ACTIVE_TREE_NODE(NAME_INDEX) = NODE_INDEX
+    TREE_CALL_COUNT(NODE_INDEX) = TREE_CALL_COUNT(NODE_INDEX) + 1
+    TREE_TS(NODE_INDEX) = T_START
+    TIMER_STACK_DEPTH = TIMER_STACK_DEPTH + 1
+    TIMER_STACK(TIMER_STACK_DEPTH) = NODE_INDEX
+  END SUBROUTINE START_TIMER
+
+  SUBROUTINE STOP_TIMER(REGION_NAME)
+    CHARACTER(LEN=*), INTENT(IN) :: REGION_NAME
+    INTEGER :: I, J, NLEN, NODE_INDEX
+    REAL(KIND=8) :: T_END
+
+    CALL WALLCLOCK(T_END)
+    NLEN = MIN(LEN_TRIM(REGION_NAME), NUM_MAX_NAMELEN)
+    IF (NLEN <= 0) THEN
+      WRITE(0,*) 'Timer region name must not be empty.'
+      RETURN
+    END IF
+
+    DO I = 1, NUM_OF_ROUTINES
+      IF (REGION_NAME(1:NLEN) == TRIM(T_NAME(I))) THEN
+        IF (.NOT. TIMER_RUNNING(I)) THEN
+          WRITE(0,*) 'Timer for ', TRIM(REGION_NAME), &
+            ' is not started.'
+          RETURN
+        END IF
+        TIMER_RUNNING(I) = .FALSE.
+        T_VALUE(I) = T_VALUE(I) + (T_END - TS(I))
+        NODE_INDEX = ACTIVE_TREE_NODE(I)
+        IF (NODE_INDEX > 0) THEN
+          TREE_VALUE(NODE_INDEX) = TREE_VALUE(NODE_INDEX) + &
+            (T_END - TREE_TS(NODE_INDEX))
+        END IF
+        ACTIVE_TREE_NODE(I) = 0
+
+        IF (TIMER_STACK_DEPTH > 0 .AND. &
+            TIMER_STACK(TIMER_STACK_DEPTH) == NODE_INDEX) THEN
+          TIMER_STACK(TIMER_STACK_DEPTH) = 0
+          TIMER_STACK_DEPTH = TIMER_STACK_DEPTH - 1
+        ELSE
+          WRITE(0,*) 'Timer nesting mismatch at ', TRIM(REGION_NAME)
+          DO J = TIMER_STACK_DEPTH, 1, -1
+            IF (TIMER_STACK(J) == NODE_INDEX) THEN
+              TIMER_STACK(J:TIMER_STACK_DEPTH-1) = &
+                TIMER_STACK(J+1:TIMER_STACK_DEPTH)
+              TIMER_STACK(TIMER_STACK_DEPTH) = 0
+              TIMER_STACK_DEPTH = TIMER_STACK_DEPTH - 1
+              EXIT
+            END IF
+          END DO
+        END IF
+        RETURN
+      END IF
+    END DO
+
+    WRITE(0,*) 'Timer for ', TRIM(REGION_NAME), ' is not started.'
+  END SUBROUTINE STOP_TIMER
+
+  SUBROUTINE PRINT_TIMER()
+    INTEGER :: I, IERR, MY_RANK, NPROC
+    INTEGER :: MIN_ROUTINES, MAX_ROUTINES, TOTAL_COUNT
+    INTEGER :: COUNT_MAX(NUM_MAX_ROUTINES)
+    LOGICAL :: MPI_READY, MPI_DONE
+    CHARACTER(LEN=47) :: P_NAME
+    REAL(KIND=8) :: TOTAL_VALUE
+    REAL(KIND=8) :: VALUE_SUM(NUM_MAX_ROUTINES)
+    REAL(KIND=8) :: VALUE_MAX(NUM_MAX_ROUTINES)
+
+    MY_RANK = 0
+    NPROC = 1
+    MPI_READY = .FALSE.
+    MPI_DONE = .FALSE.
+    CALL MPI_INITIALIZED(MPI_READY, IERR)
+    IF (MPI_READY) CALL MPI_FINALIZED(MPI_DONE, IERR)
+    IF (MPI_READY .AND. .NOT. MPI_DONE) THEN
+      CALL MPI_COMM_RANK(MPI_COMM_WORLD, MY_RANK, IERR)
+      CALL MPI_COMM_SIZE(MPI_COMM_WORLD, NPROC, IERR)
+      CALL MPI_ALLREDUCE(NUM_OF_ROUTINES, MIN_ROUTINES, 1, MPI_INTEGER, &
+        MPI_MIN, MPI_COMM_WORLD, IERR)
+      CALL MPI_ALLREDUCE(NUM_OF_ROUTINES, MAX_ROUTINES, 1, MPI_INTEGER, &
+        MPI_MAX, MPI_COMM_WORLD, IERR)
+      IF (MIN_ROUTINES /= MAX_ROUTINES) THEN
+        IF (MY_RANK == 0) THEN
+          WRITE(0,*) 'Timer region count differs between MPI ranks.'
+        END IF
+        RETURN
+      END IF
+      CALL MPI_REDUCE(T_VALUE, VALUE_SUM, NUM_MAX_ROUTINES, &
+        MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, IERR)
+      CALL MPI_REDUCE(T_VALUE, VALUE_MAX, NUM_MAX_ROUTINES, &
+        MPI_DOUBLE_PRECISION, MPI_MAX, 0, MPI_COMM_WORLD, IERR)
+      CALL MPI_REDUCE(CALL_COUNT, COUNT_MAX, NUM_MAX_ROUTINES, &
+        MPI_INTEGER, MPI_MAX, 0, MPI_COMM_WORLD, IERR)
+      IF (MY_RANK /= 0) RETURN
+    ELSE
+      VALUE_SUM = T_VALUE
+      VALUE_MAX = T_VALUE
+      COUNT_MAX = CALL_COUNT
+    END IF
+
+    DO I = 1, NUM_OF_ROUTINES
+      IF (TIMER_RUNNING(I)) THEN
+        WRITE(0,*) 'Timer for ', TRIM(T_NAME(I)), ' is not stopped.'
+        RETURN
+      END IF
+    END DO
+    IF (TIMER_STACK_DEPTH /= 0) THEN
+      WRITE(0,*) 'Timer nesting stack is not empty at print_timer.'
+      RETURN
+    END IF
+
+    TOTAL_COUNT = 0
+    TOTAL_VALUE = 0.0D0
+    WRITE(6,'(A)') ''
+    WRITE(6,'(A)') '[WW3 Timer Output]'
+    WRITE(6,'(A)') 'Elapsed time is inclusive; indentation shows the call path.'
+    WRITE(6,'(A)') '+------------------------------------------------+------+----------+------------+'
+    WRITE(6,'(A)') '|Timer region / call path                        |Rank  |Called    |Elapsed     |'
+    WRITE(6,'(A)') '|                                                |      |          |Time[s]     |'
+    WRITE(6,'(A)') '+------------------------------------------------+------+----------+------------+'
+    CALL PRINT_TIMER_TREE(MY_RANK, TOTAL_COUNT, TOTAL_VALUE)
+    P_NAME = 'TOTAL (inclusive regions)'
+    WRITE(6,'(A)') '+------------------------------------------------+------+----------+------------+'
+    WRITE(6,'(A,A47,A,I6,A,I10,A,F12.3,A)') '|', P_NAME, &
+      '|', MY_RANK, '|', TOTAL_COUNT, '|', TOTAL_VALUE, '|'
+    WRITE(6,'(A)') '+------------------------------------------------+------+----------+------------+'
+
+    WRITE(6,*)
+    WRITE(6,*) 'WW3_PROFILE_BEGIN'
+    WRITE(6,*) ' id label                    count', &
+      '      max_rank_sec       avg_rank_sec'
+    DO I = 1, NUM_OF_ROUTINES
+      IF (COUNT_MAX(I) <= 0) CYCLE
+      WRITE(6,100) I, T_NAME(I)(1:24), COUNT_MAX(I), VALUE_MAX(I), &
+        VALUE_SUM(I) / DBLE(NPROC)
+    END DO
+    WRITE(6,*) 'WW3_PROFILE_END'
+    WRITE(6,*)
+100 FORMAT(1X,I3,1X,A24,1X,I10,2(1X,F18.6))
+  END SUBROUTINE PRINT_TIMER
+
+  SUBROUTINE FIND_OR_ADD_TREE_NODE(NAME_INDEX, PARENT_INDEX, NODE_INDEX)
+    INTEGER, INTENT(IN) :: NAME_INDEX, PARENT_INDEX
+    INTEGER, INTENT(OUT) :: NODE_INDEX
+    INTEGER :: I
+
+    DO I = 1, NUM_TREE_NODES
+      IF (TREE_NAME_INDEX(I) == NAME_INDEX .AND. &
+          TREE_PARENT(I) == PARENT_INDEX) THEN
+        NODE_INDEX = I
+        RETURN
+      END IF
+    END DO
+    IF (NUM_TREE_NODES >= NUM_MAX_TREE_NODES) THEN
+      WRITE(0,*) 'Timer call-path table is full: ', TRIM(T_NAME(NAME_INDEX))
+      NODE_INDEX = 0
+      RETURN
+    END IF
+
+    NUM_TREE_NODES = NUM_TREE_NODES + 1
+    NODE_INDEX = NUM_TREE_NODES
+    TREE_NAME_INDEX(NODE_INDEX) = NAME_INDEX
+    TREE_PARENT(NODE_INDEX) = PARENT_INDEX
+    IF (PARENT_INDEX > 0) THEN
+      TREE_DEPTH(NODE_INDEX) = TREE_DEPTH(PARENT_INDEX) + 1
+    ELSE
+      TREE_DEPTH(NODE_INDEX) = 0
+    END IF
+  END SUBROUTINE FIND_OR_ADD_TREE_NODE
+
+  SUBROUTINE PRINT_TIMER_TREE(RANK, TOTAL_COUNT, TOTAL_VALUE)
+    INTEGER, INTENT(IN) :: RANK
+    INTEGER, INTENT(INOUT) :: TOTAL_COUNT
+    REAL(KIND=8), INTENT(INOUT) :: TOTAL_VALUE
+    INTEGER :: I, J, INDENT_LEN, NAME_LEN, NAME_OFFSET
+    INTEGER :: OUTPUT_STACK(NUM_MAX_TREE_NODES), OUTPUT_STACK_SIZE
+    CHARACTER(LEN=47) :: P_NAME
+
+    OUTPUT_STACK = 0
+    OUTPUT_STACK_SIZE = 0
+    DO I = NUM_TREE_NODES, 1, -1
+      IF (TREE_PARENT(I) /= 0) CYCLE
+      OUTPUT_STACK_SIZE = OUTPUT_STACK_SIZE + 1
+      OUTPUT_STACK(OUTPUT_STACK_SIZE) = I
+    END DO
+
+    DO WHILE (OUTPUT_STACK_SIZE > 0)
+      I = OUTPUT_STACK(OUTPUT_STACK_SIZE)
+      OUTPUT_STACK(OUTPUT_STACK_SIZE) = 0
+      OUTPUT_STACK_SIZE = OUTPUT_STACK_SIZE - 1
+      P_NAME = ''
+      INDENT_LEN = MIN(2 * TREE_DEPTH(I), LEN(P_NAME) - 4)
+      NAME_OFFSET = INDENT_LEN
+      IF (TREE_DEPTH(I) > 0) THEN
+        P_NAME(INDENT_LEN+1:INDENT_LEN+3) = '+- '
+        NAME_OFFSET = INDENT_LEN + 3
+      END IF
+      NAME_LEN = MIN(LEN_TRIM(T_NAME(TREE_NAME_INDEX(I))), &
+        LEN(P_NAME) - NAME_OFFSET)
+      IF (NAME_LEN > 0) THEN
+        P_NAME(NAME_OFFSET+1:NAME_OFFSET+NAME_LEN) = &
+          T_NAME(TREE_NAME_INDEX(I))(1:NAME_LEN)
+      END IF
+      TOTAL_COUNT = TOTAL_COUNT + TREE_CALL_COUNT(I)
+      TOTAL_VALUE = TOTAL_VALUE + TREE_VALUE(I)
+      WRITE(6,'(A,A47,A,I6,A,I10,A,F12.3,A)') '|', P_NAME, &
+        '|', RANK, '|', TREE_CALL_COUNT(I), '|', TREE_VALUE(I), '|'
+      DO J = NUM_TREE_NODES, 1, -1
+        IF (TREE_PARENT(J) /= I) CYCLE
+        OUTPUT_STACK_SIZE = OUTPUT_STACK_SIZE + 1
+        OUTPUT_STACK(OUTPUT_STACK_SIZE) = J
+      END DO
+    END DO
+  END SUBROUTINE PRINT_TIMER_TREE
+
+  SUBROUTINE WALLCLOCK(T)
+    REAL(KIND=8), INTENT(OUT) :: T
+    INTEGER(KIND=8) :: C, C_RATE
+
+    CALL SYSTEM_CLOCK(C, C_RATE)
+    T = DBLE(C) / DBLE(C_RATE)
+  END SUBROUTINE WALLCLOCK
+
+END MODULE MOD_TIMER

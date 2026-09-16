@@ -215,6 +215,15 @@
     # Also set endianness:
     CPPFLAGS+=("-DENDIANNESS='<endian>'")
 
+    # Optional project-specific CPP definitions (for example the WW3 timer).
+    # These are separate from compiler optimization flags because ad3 resolves
+    # all #ifdef blocks before the generated source reaches comp.
+    if [ -n "${WW3_EXTRA_CPP_FLAGS:-}" ]
+    then
+      read -r -a extra_cpp_flags <<< "${WW3_EXTRA_CPP_FLAGS}"
+      CPPFLAGS+=("${extra_cpp_flags[@]}")
+    fi
+
     <comp_seq> "${CPPFLAGS[@]}" <cppad3procflag> <cppad3flag2>  $path_i/$name.F90 <cppad3flag3> $name.F90
     <cppad3flag4> mv $name.i $name.F90
 

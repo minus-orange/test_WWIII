@@ -855,7 +855,7 @@ create_file_list()
             sourcet="$sourcet $is $db $tr $bs $refcode $igcode w3parall $uostmd"
                  IO="w3iogrmd w3iogomd w3iopomd w3iotrmd w3iorsmd w3iobcmd $oasismd $agcmmd $ogcmmd $igcmmd"
                  IO="$IO w3iosfmd w3partmd"
-                aux="constants w3servmd w3timemd $tidecode w3arrymd w3dispmd w3cspcmd w3gsrumd"
+                aux="constants mod_timer w3servmd w3timemd $tidecode w3arrymd w3dispmd w3cspcmd w3gsrumd"
                 aux="$aux w3nmlshelmd $pdlibyow" ;;
       ww3_multi|ww3_multi_esmf)
                if [ "$prog" = "ww3_multi" ]

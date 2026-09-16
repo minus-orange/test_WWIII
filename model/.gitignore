@@ -3,6 +3,7 @@
 *.mod
 mod
 mod_*
+!src/mod_timer.F90
 obj
 obj_*
 exe

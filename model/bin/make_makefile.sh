@@ -388,6 +388,7 @@
          'CONSTANTS'    ) modtest=constants.o ;;
          'W3SERVMD'     ) modtest=w3servmd.o ;;
          'W3TIMEMD'     ) modtest=w3timemd.o ;;
+         'MOD_TIMER'    ) modtest=mod_timer.o ;;
          'W3ARRYMD'     ) modtest=w3arrymd.o ;;
          'W3DISPMD'     ) modtest=w3dispmd.o ;;
          'W3GSRUMD'     ) modtest=w3gsrumd.o ;;

@@ -13,6 +13,7 @@ parallel_switch="${WW3_PARALLEL_SWITCH:-ST4_UOST}"
 compiler_name="${WW3_LEGACY_COMPILER:-nvhpc}"
 scratch_dir="${WW3_LEGACY_TMP:-${model_dir}/tmp-nvhpc-legacy}"
 jobs="${WW3_JOBS:-4}"
+timer_mode="${WW3_ENABLE_TIMER:-ON}"
 shared_programs=(ww3_grid ww3_strt ww3_prnc ww3_ounf ww3_ounp)
 parallel_programs=(ww3_shel)
 programs=("${shared_programs[@]}" "${parallel_programs[@]}")
@@ -31,6 +32,38 @@ case "${jobs}" in
     exit 2
     ;;
 esac
+case "${timer_mode}" in
+  ON|on|YES|yes|TRUE|true|1)
+    timer_mode="ON"
+    timer_flag="-DWW3_ENABLE_TIMER"
+    ;;
+  OFF|off|NO|no|FALSE|false|0)
+    timer_mode="OFF"
+    timer_flag=""
+    ;;
+  *)
+    echo "ERROR: WW3_ENABLE_TIMER must be ON or OFF." >&2
+    exit 2
+    ;;
+esac
+extra_comp_options="${EXTRA_COMP_OPTIONS:-}"
+extra_cpp_flags="${WW3_EXTRA_CPP_FLAGS:-}"
+if [[ " ${extra_comp_options} " == *" -DWW3_ENABLE_TIMER "* ]]; then
+  if [[ "${timer_mode}" == "OFF" ]]; then
+    echo "ERROR: WW3_ENABLE_TIMER=OFF conflicts with -DWW3_ENABLE_TIMER in EXTRA_COMP_OPTIONS." >&2
+    exit 2
+  fi
+elif [[ "${timer_mode}" == "ON" ]]; then
+  extra_comp_options="${extra_comp_options}${extra_comp_options:+ }${timer_flag}"
+fi
+if [[ " ${extra_cpp_flags} " == *" -DWW3_ENABLE_TIMER "* ]]; then
+  if [[ "${timer_mode}" == "OFF" ]]; then
+    echo "ERROR: WW3_ENABLE_TIMER=OFF conflicts with -DWW3_ENABLE_TIMER in WW3_EXTRA_CPP_FLAGS." >&2
+    exit 2
+  fi
+elif [[ "${timer_mode}" == "ON" ]]; then
+  extra_cpp_flags="${extra_cpp_flags}${extra_cpp_flags:+ }${timer_flag}"
+fi
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -83,6 +116,8 @@ export WW3_LEGACY_NC_CONFIG="${nc_config}"
 export WW3_LEGACY_NF_CONFIG="${nf_config}"
 export NETCDF_CONFIG="${script_dir}/nvhpc_netcdf_config.sh"
 export WW3_PARCOMPN="${jobs}"
+export EXTRA_COMP_OPTIONS="${extra_comp_options}"
+export WW3_EXTRA_CPP_FLAGS="${extra_cpp_flags}"
 export PATH="${netcdf_prefix}/bin:${PATH}"
 export LD_LIBRARY_PATH="${netcdf_prefix}/lib:${netcdf_prefix}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
@@ -93,9 +128,32 @@ echo "  MPI      : $(command -v mpifort)"
 echo "  NetCDF   : ${netcdf_prefix}"
 echo "  switches : switch_${shared_switch} (5 sequential LM)"
 echo "             switch_${parallel_switch} (ww3_shel MPI)"
+echo "  timer    : ${timer_mode} (WW3_ENABLE_TIMER)"
 echo "  scratch  : ${scratch_dir}"
 
 "${script_dir}/select_legacy_build_tree.sh" "${model_dir}" "${compiler_name}"
+
+# Compiler options are not part of the timestamps used by the WW3 legacy
+# makefiles.  Invalidate only timer-aware objects when the mode changes so an
+# ON build cannot silently reuse objects from an OFF build (or vice versa).
+state_root="${WW3_LEGACY_STATE_ROOT:-${model_dir}/.legacy-builds}"
+timer_state_file="${state_root}/${compiler_name}/timer-mode"
+previous_timer_mode=""
+if [[ -r "${timer_state_file}" ]]; then
+  previous_timer_mode="$(<"${timer_state_file}")"
+fi
+if [[ "${previous_timer_mode}" != "${timer_mode}" ]]; then
+  echo "Timer mode changed (${previous_timer_mode:-unset} -> ${timer_mode}); refreshing timer-aware objects."
+  rm -f \
+    "${model_dir}/obj_MPI/mod_timer.o" \
+    "${model_dir}/obj_MPI/w3wavemd.o" \
+    "${model_dir}/obj_MPI/ww3_shel.o" \
+    "${model_dir}/mod_MPI/mod_timer.mod" \
+    "${model_dir}/mod_MPI/w3wavemd.mod" \
+    "${model_dir}/exe/ww3_shel"
+  printf '%s\n' "${timer_mode}" > "${timer_state_file}"
+fi
+
 "${script_dir}/prepare_legacy_program_set.sh" "${model_dir}" "${programs[@]}"
 
 build_program_group() {

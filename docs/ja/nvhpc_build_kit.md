@@ -86,13 +86,14 @@ WW3_SOURCE_DIR/
 - `prepare_legacy_program_set.sh`: 指定LMだけを生成・保持するための事前整理
 - `switch_ST4_UOST`: 今回確認した物理switch
 - `switch_ST4_UOST_SHRD`: 前処理・後処理用の非MPI switch
+- `mod_timer.F90`: 最大3階層のMPI集約タイマーmodule
 - UOST smoke testの実行・結果確認script
 
 legacy build:
 
 - `build_nvhpc_legacy.sh`
 - `nvhpc_netcdf_config.sh`
-- `cmplr.env`、`w3_setup`、`w3_make`、依存解析・診断表示のpatch
+- `cmplr.env`、`w3_setup`、`w3_make`、依存解析・診断表示・タイマー計装のpatch
 
 共通patchには、ST4_UOSTでNVHPCが検出したWW3 7.14上流sourceの2件の不整合修正も
 含む。
