@@ -1,14 +1,14 @@
 # 配布用artifact
 
-## `ww3-nvhpc-legacy-kit-0c67f422.tar.gz`
+## `ww3-nvhpc-legacy-kit-f83d1563.tar.gz`
 
 別のWAVEWATCH III 7.14 source directoryへ、NVIDIA HPC SDKの非CMake
 legacy build環境を移植するためのkitである。
 
 ```text
 WW3 upstream commit : c3b0d04d0d632641dab2dde7f053f4ab3ee35043
-kit source commit   : 0c67f4221094596160b66e9ae13f37836b169815
-SHA-256             : a6dfc7ea0575b25675469108098519e11073823e178c400e447ebdc4cdb8a5e0
+kit source commit   : f83d1563bbf69f3a7f6f8ac7400c81f73964efe4
+SHA-256             : 1d2b591b2dd409d55f0a6ec672bded4197888e70d5822dea4ea58d66a8eb2792
 ```
 
 WW3本体のCMake build用script、toolchain、patchは含まない。Linuxで警告や不要な
@@ -26,13 +26,13 @@ checksum照合により、安全な上書き更新を行う。
 使用方法:
 
 ```bash
-tar -xzf artifacts/ww3-nvhpc-legacy-kit-0c67f422.tar.gz
-./ww3-nvhpc-legacy-kit-0c67f422/install.sh /path/to/other/WW3
+tar -xzf artifacts/ww3-nvhpc-legacy-kit-f83d1563.tar.gz
+./ww3-nvhpc-legacy-kit-f83d1563/install.sh /path/to/other/WW3
 ```
 
 再生成方法:
 
 ```bash
-git checkout 0c67f4221094596160b66e9ae13f37836b169815
-./tools/export_nvhpc_build_kit.sh /tmp/ww3-nvhpc-legacy-kit-0c67f422
+git checkout f83d1563bbf69f3a7f6f8ac7400c81f73964efe4
+./tools/export_nvhpc_build_kit.sh /tmp/ww3-nvhpc-legacy-kit-f83d1563
 ```
