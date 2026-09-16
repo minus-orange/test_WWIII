@@ -12,6 +12,7 @@ previous_kit_commits=(
   3e535853ea8879a8ae60fcc0ef1a883e636400cc
   0565dd31a6f8826eb2003eae85ef49ab9be7f45d
   0c67f4221094596160b66e9ae13f37836b169815
+  f83d1563bbf69f3a7f6f8ac7400c81f73964efe4
 )
 
 if [[ $# -ne 1 ]]; then

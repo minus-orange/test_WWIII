@@ -72,7 +72,7 @@ require_command() {
   }
 }
 
-for command_name in make ar cc nvfortran mpifort mpicc; do
+for command_name in make ar cc cksum nvfortran mpifort mpicc; do
   require_command "${command_name}"
 done
 for config in "${nc_config}" "${nf_config}"; do
@@ -133,17 +133,32 @@ echo "  scratch  : ${scratch_dir}"
 
 "${script_dir}/select_legacy_build_tree.sh" "${model_dir}" "${compiler_name}"
 
-# Compiler options are not part of the timestamps used by the WW3 legacy
-# makefiles.  Invalidate only timer-aware objects when the mode changes so an
-# ON build cannot silently reuse objects from an OFF build (or vice versa).
+# Compiler options and all module source changes are not reliably represented
+# by the timestamps used by the WW3 legacy makefiles.  Invalidate only
+# timer-aware objects when either the mode or timer source signature changes.
+# This also prevents a stale mod_timer.mod from retaining an older MPI module
+# dependency after the source has been updated.
 state_root="${WW3_LEGACY_STATE_ROOT:-${model_dir}/.legacy-builds}"
 timer_state_file="${state_root}/${compiler_name}/timer-mode"
+timer_signature_file="${state_root}/${compiler_name}/timer-signature"
 previous_timer_mode=""
+previous_timer_signature=""
 if [[ -r "${timer_state_file}" ]]; then
   previous_timer_mode="$(<"${timer_state_file}")"
 fi
-if [[ "${previous_timer_mode}" != "${timer_mode}" ]]; then
-  echo "Timer mode changed (${previous_timer_mode:-unset} -> ${timer_mode}); refreshing timer-aware objects."
+if [[ -r "${timer_signature_file}" ]]; then
+  previous_timer_signature="$(<"${timer_signature_file}")"
+fi
+timer_signature="$({
+  printf 'mode=%s\n' "${timer_mode}"
+  cksum \
+    "${model_dir}/src/mod_timer.F90" \
+    "${model_dir}/src/w3wavemd.F90" \
+    "${model_dir}/src/ww3_shel.F90"
+} | cksum | awk '{print $1 ":" $2}')"
+if [[ "${previous_timer_mode}" != "${timer_mode}" || \
+      "${previous_timer_signature}" != "${timer_signature}" ]]; then
+  echo "Timer configuration changed; refreshing timer-aware objects."
   rm -f \
     "${model_dir}/obj_MPI/mod_timer.o" \
     "${model_dir}/obj_MPI/w3wavemd.o" \
@@ -152,6 +167,7 @@ if [[ "${previous_timer_mode}" != "${timer_mode}" ]]; then
     "${model_dir}/mod_MPI/w3wavemd.mod" \
     "${model_dir}/exe/ww3_shel"
   printf '%s\n' "${timer_mode}" > "${timer_state_file}"
+  printf '%s\n' "${timer_signature}" > "${timer_signature_file}"
 fi
 
 "${script_dir}/prepare_legacy_program_set.sh" "${model_dir}" "${programs[@]}"
