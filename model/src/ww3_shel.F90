@@ -442,6 +442,7 @@ PROGRAM W3SHEL
   CALL DATE_AND_TIME ( VALUES=CLKDT1 )
 #ifdef WW3_ENABLE_TIMER
   CALL RESET_TIMER()
+  CALL START_TIMER('totalnoregion')
   CALL START_TIMER('initialize')
   CALL START_TIMER('data_structure_setup')
 #endif
@@ -2983,6 +2984,7 @@ CONTAINS
     IF (TIMER_FINALIZE_READY) THEN
       CALL STOP_TIMER('final_report')
       CALL STOP_TIMER('finalize')
+      CALL STOP_TIMER('totalnoregion')
       CALL PRINT_TIMER()
     END IF
 #endif

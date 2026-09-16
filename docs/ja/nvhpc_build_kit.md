@@ -86,7 +86,7 @@ WW3_SOURCE_DIR/
 - `prepare_legacy_program_set.sh`: 指定LMだけを生成・保持するための事前整理
 - `switch_ST4_UOST`: 今回確認した物理switch
 - `switch_ST4_UOST_SHRD`: 前処理・後処理用の非MPI switch
-- `mod_timer.F90`: 最大3階層のMPI集約タイマーmodule
+- `mod_timer.F90`: `totalnoregion`を最外周とする最大4階層のMPI集約タイマーmodule
 - UOST smoke testの実行・結果確認script
 
 legacy build:

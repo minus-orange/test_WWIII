@@ -14,7 +14,7 @@
 | [CPU基準テスト](cpu_baseline_tests.md) | 小規模な伝播、ST4ソース項、UOSTのCPU実行結果と再実行手順 |
 | [NVIDIA HPC SDKビルド環境](build_NVHPC.md) | `nvfortran`とNVHPC版MPI/NetCDFを使う標準CMakeビルド手順 |
 | [NVIDIA HPC SDK legacy build](build_NVHPC_legacy.md) | CMakeを使わない`w3_setup`＋`w3_make`手順 |
-| [NVHPC版ww3_shel階層タイマー](nvhpc_timer.md) | 最大3階層の処理時間計測、ON/OFF、出力の読み方 |
+| [NVHPC版ww3_shel階層タイマー](nvhpc_timer.md) | `totalnoregion`を最外周とする最大4階層の処理時間計測、ON/OFF、出力の読み方 |
 | [Intel oneAPI legacy build](build_ONEAPI_legacy.md) | `ifx`／Intel MPIによるCMakeなしWW3本体ビルド手順 |
 | [NVHPC版UOSTスモークテスト](nvhpc_smoke_test.md) | 作成済みLMによる小規模実行と結果検査script |
 | [NVHPC移植用ビルドキット](nvhpc_build_kit.md) | 別のWW3 7.14 source directoryへ非CMakeのNVHPC legacy build環境を移植する手順 |

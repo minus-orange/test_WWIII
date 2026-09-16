@@ -56,8 +56,8 @@ NVHPC版LMの恒久的な場所は`model/.legacy-builds/nvhpc/exe`である。
 ## 階層タイマー
 
 `ww3_shel`の階層タイマーは既定で有効であり、build時に
-`-DWW3_ENABLE_TIMER`が追加される。最大3階層で`initialize`、
-`timestep_loop`、`finalize`と、`W3WAVE`内のsource項・伝播・出力等を測定する。
+`-DWW3_ENABLE_TIMER`が追加される。最外周の`totalnoregion`を含む最大4階層で
+`initialize`、`timestep_loop`、`finalize`と、`W3WAVE`内のsource項・伝播・出力等を測定する。
 
 ```bash
 # 既定（タイマー有効）

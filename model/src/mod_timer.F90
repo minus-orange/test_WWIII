@@ -9,7 +9,7 @@
 ! The FPSEID-specific external wrappers and diagnostic report were removed.
 ! The module interface (reset_timer, start_timer, stop_timer, print_timer)
 ! and MPI max/average aggregation are retained.  WW3 instrumentation is
-! deliberately limited to three active timer regions.
+! deliberately limited to four active timer regions.
 MODULE MOD_TIMER
   USE MPI
   IMPLICIT NONE
@@ -17,7 +17,7 @@ MODULE MOD_TIMER
   INTEGER, PRIVATE, PARAMETER :: NUM_MAX_ROUTINES = 192
   INTEGER, PRIVATE, PARAMETER :: NUM_MAX_TREE_NODES = 512
   INTEGER, PRIVATE, PARAMETER :: NUM_MAX_NAMELEN = 100
-  INTEGER, PRIVATE, PARAMETER :: MAX_TIMER_NESTING = 3
+  INTEGER, PRIVATE, PARAMETER :: MAX_TIMER_NESTING = 4
 
   INTEGER, PRIVATE :: NUM_OF_ROUTINES = 0
   INTEGER, PRIVATE :: NUM_TREE_NODES = 0

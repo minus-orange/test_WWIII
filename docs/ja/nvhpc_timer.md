@@ -2,7 +2,7 @@
 
 ## 概要
 
-NVHPCのCMake不使用legacy buildで、`ww3_shel`の初期化、時間積分、終了処理と、
+NVHPCのCMake不使用legacy buildで、`ww3_shel`の全体時間、初期化、時間積分、終了処理と、
 `W3WAVE`内の主要処理時間を測定する。タイマー呼び出しは`WW3_ENABLE_TIMER`の
 プリプロセッサ定義で切り替わり、無効時は計測コード自体が実行ファイルへ入らない。
 
@@ -44,29 +44,31 @@ scriptは有効時だけ`-DWW3_ENABLE_TIMER`を`WW3_EXTRA_CPP_FLAGS`と
 
 ## 計測階層
 
-最大ネスト数は`mod_timer.F90`でも3に制限している。現在の計測木は次のとおり。
+最大ネスト数は`mod_timer.F90`でも4に制限している。現在の計測木は次のとおり。
 
 ```text
-initialize
-  +- data_structure_setup
-  +- mpi_setup
-  +- configuration_io
-  +- model_initialize
-
-timestep_loop
-  +- input_update
-  +- wave_model
-       +- field_updates
-       +- source_terms_pre
-       +- propagation
-       +- source_terms
-       +- output
-  +- data_assimilation
-
-finalize
-  +- final_barrier
-  +- final_report
+totalnoregion
+  +- initialize
+       +- data_structure_setup
+       +- mpi_setup
+       +- configuration_io
+       +- model_initialize
+  +- timestep_loop
+       +- input_update
+       +- wave_model
+            +- field_updates
+            +- source_terms_pre
+            +- propagation
+            +- source_terms
+            +- output
+       +- data_assimilation
+  +- finalize
+       +- final_barrier
+       +- final_report
 ```
+
+`totalnoregion`はタイマー初期化直後から`finalize`終了直後までを囲む最外周Regionで、
+初期化・時間積分・終了表示を含むプログラム主要処理全体の経過時間を表す。
 
 `source_terms_pre`は主にPDLIBの分割source項前半、`source_terms`は通常の
 `W3SRCE`を含むsource項計算、`propagation`はスペクトル内・空間伝播、`output`は
@@ -95,7 +97,7 @@ finalize
 
 - 各区間はinclusive timeであり、親区間は子区間を含む。
 - `TOTAL (inclusive regions)`は親子を重複加算した表示で、実行全体時間ではない。
-- `finalize`は最終barrierと終了表示を含む。rank間集計をMPI終了前に行う必要があるため、
+- `totalnoregion`と`finalize`は、rank間集計をMPI終了前に行う必要があるため、
   `MPI_FINALIZE`そのものと、その後に実行できない処理は含まない。
 - 計測のON/OFFを比較する場合は、同じswitch、MPI rank数、入力、GPU、実行条件を使う。
 - `W3_SEC1`は今回の`switch_ST4_UOST`に含まれない。別switchへ展開する場合は、
