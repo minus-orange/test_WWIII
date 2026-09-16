@@ -81,8 +81,10 @@ command -v git >/dev/null 2>&1 || {
   exit 1
 }
 if command -v sha256sum >/dev/null 2>&1; then
+  checksum_file() { sha256sum "$1" | awk '{print $1}'; }
   (cd "${kit_dir}" && sha256sum -c SHA256SUMS >/dev/null)
 elif command -v shasum >/dev/null 2>&1; then
+  checksum_file() { shasum -a 256 "$1" | awk '{print $1}'; }
   (cd "${kit_dir}" && shasum -a 256 -c SHA256SUMS >/dev/null)
 else
   echo "ERROR: sha256sum or shasum is required to verify the build kit." >&2
@@ -95,6 +97,13 @@ optional_patches=(
   "patches/optional-ww3-sbs1-ww3-7.14.patch"
 )
 overlays=("files/common" "files/legacy")
+known_overlay_manifest="${kit_dir}/KNOWN_OVERLAY_SHA256SUMS"
+
+declare -a upgrade_patches=()
+while IFS= read -r -d '' upgrade_patch; do
+  upgrade_patches+=("${upgrade_patch#${kit_dir}/}")
+done < <(find "${kit_dir}/patches" -maxdepth 1 -type f \
+  -name 'upgrade-*-to-current.patch' -print0 | sort -z)
 
 declare -a required_patch_actions=()
 for relative_patch in "${required_patches[@]}"; do
@@ -105,11 +114,23 @@ for relative_patch in "${required_patches[@]}"; do
   elif (cd "${target}" && git apply --reverse --check "${patch_file}" >/dev/null 2>&1); then
     required_patch_actions+=("skip")
   else
-    echo "ERROR: required NVHPC patch does not apply cleanly: ${relative_patch}" >&2
-    echo "The target may be a different WW3 revision or contain overlapping edits." >&2
-    (cd "${target}" && git apply --check "${patch_file}") || true
-    echo "No source patches or support files were changed." >&2
-    exit 1
+    upgrade_action=""
+    for relative_upgrade in "${upgrade_patches[@]}"; do
+      upgrade_file="${kit_dir}/${relative_upgrade}"
+      if (cd "${target}" && git apply --check "${upgrade_file}" >/dev/null 2>&1); then
+        upgrade_action="upgrade:${relative_upgrade}"
+        break
+      fi
+    done
+    if [[ -n "${upgrade_action}" ]]; then
+      required_patch_actions+=("${upgrade_action}")
+    else
+      echo "ERROR: required NVHPC patch does not apply cleanly: ${relative_patch}" >&2
+      echo "The target may be a different WW3 revision or contain overlapping edits." >&2
+      (cd "${target}" && git apply --check "${patch_file}") || true
+      echo "No source patches or support files were changed." >&2
+      exit 1
+    fi
   fi
 done
 
@@ -133,10 +154,16 @@ for overlay in "${overlays[@]}"; do
     relative_file="${source_file#${kit_dir}/${overlay}/}"
     destination="${target}/${relative_file}"
     if [[ -e "${destination}" ]] && ! cmp -s "${source_file}" "${destination}" && [[ "${force}" != "yes" ]]; then
-      echo "ERROR: support file already exists with different content: ${destination}" >&2
-      echo "Review it first, or repeat with --force to replace support files." >&2
-      echo "No source patches or support files were changed." >&2
-      exit 1
+      destination_hash="$(checksum_file "${destination}")"
+      if [[ -f "${known_overlay_manifest}" ]] && \
+          grep -Fqx "${destination_hash}  ${relative_file}" "${known_overlay_manifest}"; then
+        echo "Upgrading support file from a known kit: ${relative_file}"
+      else
+        echo "ERROR: support file already exists with different content: ${destination}" >&2
+        echo "Review it first, or repeat with --force to replace support files." >&2
+        echo "No source patches or support files were changed." >&2
+        exit 1
+      fi
     fi
     overlay_sources+=("${source_file}")
     overlay_destinations+=("${destination}")
@@ -144,12 +171,20 @@ for overlay in "${overlays[@]}"; do
 done
 
 for index in "${!required_patches[@]}"; do
-  if [[ "${required_patch_actions[$index]}" == "apply" ]]; then
-    echo "Applying ${required_patches[$index]}"
-    (cd "${target}" && git apply "${kit_dir}/${required_patches[$index]}")
-  else
-    echo "Already applied: ${required_patches[$index]}"
-  fi
+  case "${required_patch_actions[$index]}" in
+    apply)
+      echo "Applying ${required_patches[$index]}"
+      (cd "${target}" && git apply "${kit_dir}/${required_patches[$index]}")
+      ;;
+    skip)
+      echo "Already applied: ${required_patches[$index]}"
+      ;;
+    upgrade:*)
+      relative_upgrade="${required_patch_actions[$index]#upgrade:}"
+      echo "Upgrading an earlier NVHPC kit with ${relative_upgrade}"
+      (cd "${target}" && git apply "${kit_dir}/${relative_upgrade}")
+      ;;
+  esac
 done
 
 for index in "${!optional_patches[@]}"; do

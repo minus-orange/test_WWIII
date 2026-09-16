@@ -67,12 +67,16 @@ WW3_SOURCE_DIR/
 場合は、検出した`VERSION`と`w3_setup`のpathを短く表示する。
 
 適用前に全patchを`git apply --check`し、対象側の変更と衝突する場合は何も変更せず
-停止する。ただし、NVHPC設定とは独立した`w3gridmd.F90`と`ww3_sbs1.F90`の上流
+停止する。以前の本リポジトリ製NVHPC kitを導入済みの場合は、既知の旧版から
+最新版への専用差分patchを自動選択する。旧kitとchecksumが一致するsupport fileも
+安全に更新され、`Upgrading an earlier NVHPC kit`と更新経路が表示される。
+
+ただし、NVHPC設定とは独立した`w3gridmd.F90`と`ww3_sbs1.F90`の上流
 不整合修正はoptional patchとして分離している。対象側の実装が異なる場合は警告して
 省略し、NVHPC legacy build環境の導入を継続する。追加するsupport fileが既に異なる
 内容で存在する場合は停止する。
 内容を確認して置換する場合だけ`--force`を指定する。`--force`でもsource patchの
-衝突は無視しない。
+衝突は無視しない。既知の旧kitとも一致しない独自変更は従来どおり自動上書きしない。
 
 ## 含まれるファイル
 
