@@ -36,3 +36,20 @@ tar -xzf artifacts/ww3-nvhpc-legacy-kit-7d20370b.tar.gz
 git checkout 7d20370b4cc23fb566b1efa63ba4875c15bb56a3
 ./tools/export_nvhpc_build_kit.sh /tmp/ww3-nvhpc-legacy-kit-7d20370b
 ```
+
+## タイマー手動移植用diff
+
+`ww3-timer-manual-port-7d20370b.tar.gz`は、既存sourceへの一括patch適用が難しい場合に、
+タイマー関連変更だけを手作業で移植するための資料である。
+
+```text
+SHA-256: a82be1a119e24947c363aa7bcf529628cf56f7eb1919a191223e4df6e15496f5
+```
+
+統合diff、必須source別diff、legacy build連携diff、完成版`mod_timer.F90`、日本語の
+移植手順とchecksumを含む。
+
+```bash
+tar -xzf artifacts/ww3-timer-manual-port-7d20370b.tar.gz
+less ww3-timer-manual-port-7d20370b/README_JA.md
+```

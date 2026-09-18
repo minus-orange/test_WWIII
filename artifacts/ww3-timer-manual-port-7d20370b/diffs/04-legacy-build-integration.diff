@@ -1,0 +1,163 @@
+diff --git a/model/bin/ad3.tmpl b/model/bin/ad3.tmpl
+index 695cd0a4cd7fd318e50a6001fd57ce93aa1245df..a5d9cafad69e25d9d110a10e36079e22642ab3db 100755
+--- a/model/bin/ad3.tmpl
++++ b/model/bin/ad3.tmpl
+@@ -215,6 +215,15 @@
+     # Also set endianness:
+     CPPFLAGS+=("-DENDIANNESS='<endian>'")
+ 
++    # Optional project-specific CPP definitions (for example the WW3 timer).
++    # These are separate from compiler optimization flags because ad3 resolves
++    # all #ifdef blocks before the generated source reaches comp.
++    if [ -n "${WW3_EXTRA_CPP_FLAGS:-}" ]
++    then
++      read -r -a extra_cpp_flags <<< "${WW3_EXTRA_CPP_FLAGS}"
++      CPPFLAGS+=("${extra_cpp_flags[@]}")
++    fi
++
+     <comp_seq> "${CPPFLAGS[@]}" <cppad3procflag> <cppad3flag2>  $path_i/$name.F90 <cppad3flag3> $name.F90
+     <cppad3flag4> mv $name.i $name.F90
+ 
+diff --git a/model/bin/build_utils.sh b/model/bin/build_utils.sh
+index 8e854990e8dbae68109897d5c4aa19105033a0ce..f85257482302778f39a1e2c60fa9ee868eb01683 100755
+--- a/model/bin/build_utils.sh
++++ b/model/bin/build_utils.sh
+@@ -855,7 +855,7 @@ create_file_list()
+             sourcet="$sourcet $is $db $tr $bs $refcode $igcode w3parall $uostmd"
+                  IO="w3iogrmd w3iogomd w3iopomd w3iotrmd w3iorsmd w3iobcmd $oasismd $agcmmd $ogcmmd $igcmmd"
+                  IO="$IO w3iosfmd w3partmd"
+-                aux="constants w3servmd w3timemd $tidecode w3arrymd w3dispmd w3cspcmd w3gsrumd"
++                aux="constants mod_timer w3servmd w3timemd $tidecode w3arrymd w3dispmd w3cspcmd w3gsrumd"
+                 aux="$aux w3nmlshelmd $pdlibyow" ;;
+       ww3_multi|ww3_multi_esmf)
+                if [ "$prog" = "ww3_multi" ]
+diff --git a/model/bin/make_makefile.sh b/model/bin/make_makefile.sh
+index 7f436487ede108586a8e6ad6c786057225f56af9..ff1655c5d547c8b58c24e36ce059782edd10f167 100755
+--- a/model/bin/make_makefile.sh
++++ b/model/bin/make_makefile.sh
+@@ -388,6 +388,7 @@
+          'CONSTANTS'    ) modtest=constants.o ;;
+          'W3SERVMD'     ) modtest=w3servmd.o ;;
+          'W3TIMEMD'     ) modtest=w3timemd.o ;;
++         'MOD_TIMER'    ) modtest=mod_timer.o ;;
+          'W3ARRYMD'     ) modtest=w3arrymd.o ;;
+          'W3DISPMD'     ) modtest=w3dispmd.o ;;
+          'W3GSRUMD'     ) modtest=w3gsrumd.o ;;
+diff --git a/tools/build_nvhpc_legacy.sh b/tools/build_nvhpc_legacy.sh
+index fc43028ec68c304e10611d5bc6aa1f7c861fc8a7..ca3aec8a351074e2efdc0454f1df9a1327ab9f3d 100755
+--- a/tools/build_nvhpc_legacy.sh
++++ b/tools/build_nvhpc_legacy.sh
+@@ -13,6 +13,7 @@ parallel_switch="${WW3_PARALLEL_SWITCH:-ST4_UOST}"
+ compiler_name="${WW3_LEGACY_COMPILER:-nvhpc}"
+ scratch_dir="${WW3_LEGACY_TMP:-${model_dir}/tmp-nvhpc-legacy}"
+ jobs="${WW3_JOBS:-4}"
++timer_mode="${WW3_ENABLE_TIMER:-ON}"
+ shared_programs=(ww3_grid ww3_strt ww3_prnc ww3_ounf ww3_ounp)
+ parallel_programs=(ww3_shel)
+ programs=("${shared_programs[@]}" "${parallel_programs[@]}")
+@@ -31,6 +32,38 @@ case "${jobs}" in
+     exit 2
+     ;;
+ esac
++case "${timer_mode}" in
++  ON|on|YES|yes|TRUE|true|1)
++    timer_mode="ON"
++    timer_flag="-DWW3_ENABLE_TIMER"
++    ;;
++  OFF|off|NO|no|FALSE|false|0)
++    timer_mode="OFF"
++    timer_flag=""
++    ;;
++  *)
++    echo "ERROR: WW3_ENABLE_TIMER must be ON or OFF." >&2
++    exit 2
++    ;;
++esac
++extra_comp_options="${EXTRA_COMP_OPTIONS:-}"
++extra_cpp_flags="${WW3_EXTRA_CPP_FLAGS:-}"
++if [[ " ${extra_comp_options} " == *" -DWW3_ENABLE_TIMER "* ]]; then
++  if [[ "${timer_mode}" == "OFF" ]]; then
++    echo "ERROR: WW3_ENABLE_TIMER=OFF conflicts with -DWW3_ENABLE_TIMER in EXTRA_COMP_OPTIONS." >&2
++    exit 2
++  fi
++elif [[ "${timer_mode}" == "ON" ]]; then
++  extra_comp_options="${extra_comp_options}${extra_comp_options:+ }${timer_flag}"
++fi
++if [[ " ${extra_cpp_flags} " == *" -DWW3_ENABLE_TIMER "* ]]; then
++  if [[ "${timer_mode}" == "OFF" ]]; then
++    echo "ERROR: WW3_ENABLE_TIMER=OFF conflicts with -DWW3_ENABLE_TIMER in WW3_EXTRA_CPP_FLAGS." >&2
++    exit 2
++  fi
++elif [[ "${timer_mode}" == "ON" ]]; then
++  extra_cpp_flags="${extra_cpp_flags}${extra_cpp_flags:+ }${timer_flag}"
++fi
+ 
+ require_command() {
+   command -v "$1" >/dev/null 2>&1 || {
+@@ -39,7 +72,7 @@ require_command() {
+   }
+ }
+ 
+-for command_name in make ar cc nvfortran mpifort mpicc; do
++for command_name in make ar cc cksum nvfortran mpifort mpicc; do
+   require_command "${command_name}"
+ done
+ for config in "${nc_config}" "${nf_config}"; do
+@@ -83,6 +116,8 @@ export WW3_LEGACY_NC_CONFIG="${nc_config}"
+ export WW3_LEGACY_NF_CONFIG="${nf_config}"
+ export NETCDF_CONFIG="${script_dir}/nvhpc_netcdf_config.sh"
+ export WW3_PARCOMPN="${jobs}"
++export EXTRA_COMP_OPTIONS="${extra_comp_options}"
++export WW3_EXTRA_CPP_FLAGS="${extra_cpp_flags}"
+ export PATH="${netcdf_prefix}/bin:${PATH}"
+ export LD_LIBRARY_PATH="${netcdf_prefix}/lib:${netcdf_prefix}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+ 
+@@ -93,9 +128,48 @@ echo "  MPI      : $(command -v mpifort)"
+ echo "  NetCDF   : ${netcdf_prefix}"
+ echo "  switches : switch_${shared_switch} (5 sequential LM)"
+ echo "             switch_${parallel_switch} (ww3_shel MPI)"
++echo "  timer    : ${timer_mode} (WW3_ENABLE_TIMER)"
+ echo "  scratch  : ${scratch_dir}"
+ 
+ "${script_dir}/select_legacy_build_tree.sh" "${model_dir}" "${compiler_name}"
++
++# Compiler options and all module source changes are not reliably represented
++# by the timestamps used by the WW3 legacy makefiles.  Invalidate only
++# timer-aware objects when either the mode or timer source signature changes.
++# This also prevents a stale mod_timer.mod from retaining an older MPI module
++# dependency after the source has been updated.
++state_root="${WW3_LEGACY_STATE_ROOT:-${model_dir}/.legacy-builds}"
++timer_state_file="${state_root}/${compiler_name}/timer-mode"
++timer_signature_file="${state_root}/${compiler_name}/timer-signature"
++previous_timer_mode=""
++previous_timer_signature=""
++if [[ -r "${timer_state_file}" ]]; then
++  previous_timer_mode="$(<"${timer_state_file}")"
++fi
++if [[ -r "${timer_signature_file}" ]]; then
++  previous_timer_signature="$(<"${timer_signature_file}")"
++fi
++timer_signature="$({
++  printf 'mode=%s\n' "${timer_mode}"
++  cksum \
++    "${model_dir}/src/mod_timer.F90" \
++    "${model_dir}/src/w3wavemd.F90" \
++    "${model_dir}/src/ww3_shel.F90"
++} | cksum | awk '{print $1 ":" $2}')"
++if [[ "${previous_timer_mode}" != "${timer_mode}" || \
++      "${previous_timer_signature}" != "${timer_signature}" ]]; then
++  echo "Timer configuration changed; refreshing timer-aware objects."
++  rm -f \
++    "${model_dir}/obj_MPI/mod_timer.o" \
++    "${model_dir}/obj_MPI/w3wavemd.o" \
++    "${model_dir}/obj_MPI/ww3_shel.o" \
++    "${model_dir}/mod_MPI/mod_timer.mod" \
++    "${model_dir}/mod_MPI/w3wavemd.mod" \
++    "${model_dir}/exe/ww3_shel"
++  printf '%s\n' "${timer_mode}" > "${timer_state_file}"
++  printf '%s\n' "${timer_signature}" > "${timer_signature_file}"
++fi
++
+ "${script_dir}/prepare_legacy_program_set.sh" "${model_dir}" "${programs[@]}"
+ 
+ build_program_group() {

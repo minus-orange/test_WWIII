@@ -1,0 +1,820 @@
+diff --git a/model/bin/ad3.tmpl b/model/bin/ad3.tmpl
+index 695cd0a4cd7fd318e50a6001fd57ce93aa1245df..a5d9cafad69e25d9d110a10e36079e22642ab3db 100755
+--- a/model/bin/ad3.tmpl
++++ b/model/bin/ad3.tmpl
+@@ -215,6 +215,15 @@
+     # Also set endianness:
+     CPPFLAGS+=("-DENDIANNESS='<endian>'")
+ 
++    # Optional project-specific CPP definitions (for example the WW3 timer).
++    # These are separate from compiler optimization flags because ad3 resolves
++    # all #ifdef blocks before the generated source reaches comp.
++    if [ -n "${WW3_EXTRA_CPP_FLAGS:-}" ]
++    then
++      read -r -a extra_cpp_flags <<< "${WW3_EXTRA_CPP_FLAGS}"
++      CPPFLAGS+=("${extra_cpp_flags[@]}")
++    fi
++
+     <comp_seq> "${CPPFLAGS[@]}" <cppad3procflag> <cppad3flag2>  $path_i/$name.F90 <cppad3flag3> $name.F90
+     <cppad3flag4> mv $name.i $name.F90
+ 
+diff --git a/model/bin/build_utils.sh b/model/bin/build_utils.sh
+index 8e854990e8dbae68109897d5c4aa19105033a0ce..f85257482302778f39a1e2c60fa9ee868eb01683 100755
+--- a/model/bin/build_utils.sh
++++ b/model/bin/build_utils.sh
+@@ -855,7 +855,7 @@ create_file_list()
+             sourcet="$sourcet $is $db $tr $bs $refcode $igcode w3parall $uostmd"
+                  IO="w3iogrmd w3iogomd w3iopomd w3iotrmd w3iorsmd w3iobcmd $oasismd $agcmmd $ogcmmd $igcmmd"
+                  IO="$IO w3iosfmd w3partmd"
+-                aux="constants w3servmd w3timemd $tidecode w3arrymd w3dispmd w3cspcmd w3gsrumd"
++                aux="constants mod_timer w3servmd w3timemd $tidecode w3arrymd w3dispmd w3cspcmd w3gsrumd"
+                 aux="$aux w3nmlshelmd $pdlibyow" ;;
+       ww3_multi|ww3_multi_esmf)
+                if [ "$prog" = "ww3_multi" ]
+diff --git a/model/bin/make_makefile.sh b/model/bin/make_makefile.sh
+index 7f436487ede108586a8e6ad6c786057225f56af9..ff1655c5d547c8b58c24e36ce059782edd10f167 100755
+--- a/model/bin/make_makefile.sh
++++ b/model/bin/make_makefile.sh
+@@ -388,6 +388,7 @@
+          'CONSTANTS'    ) modtest=constants.o ;;
+          'W3SERVMD'     ) modtest=w3servmd.o ;;
+          'W3TIMEMD'     ) modtest=w3timemd.o ;;
++         'MOD_TIMER'    ) modtest=mod_timer.o ;;
+          'W3ARRYMD'     ) modtest=w3arrymd.o ;;
+          'W3DISPMD'     ) modtest=w3dispmd.o ;;
+          'W3GSRUMD'     ) modtest=w3gsrumd.o ;;
+diff --git a/model/src/mod_timer.F90 b/model/src/mod_timer.F90
+new file mode 100644
+index 0000000000000000000000000000000000000000..afaf20a32f1d243ba338b92f86fb075026ffd77d
+--- /dev/null
++++ b/model/src/mod_timer.F90
+@@ -0,0 +1,335 @@
++! Timing utility adapted for WAVEWATCH III.
++!
++! Source:
++!   https://github.com/minus-orange/test_tddft/blob/
++!     tddft-openacc-residency/FPSEID21/tddft_2022October/mod_timer.f90
++! Source revision:
++!   2e9c92b3c2391832b7d0137b201486c394bcd630
++!
++! The FPSEID-specific external wrappers and diagnostic report were removed.
++! The module interface (reset_timer, start_timer, stop_timer, print_timer)
++! is retained.  Each MPI process keeps and writes its own timing data; no
++! timer collectives are used.  WW3 instrumentation is deliberately limited
++! to four active timer regions.
++MODULE MOD_TIMER
++  USE MPI_F08, ONLY: MPI_INITIALIZED, MPI_FINALIZED, MPI_COMM_RANK, &
++    MPI_COMM_WORLD
++  IMPLICIT NONE
++  PRIVATE
++
++  PUBLIC :: RESET_TIMER, START_TIMER, STOP_TIMER, PRINT_TIMER
++
++  INTEGER, PARAMETER :: NUM_MAX_ROUTINES = 192
++  INTEGER, PARAMETER :: NUM_MAX_TREE_NODES = 512
++  INTEGER, PARAMETER :: NUM_MAX_NAMELEN = 100
++  INTEGER, PARAMETER :: MAX_TIMER_NESTING = 4
++
++  INTEGER, PRIVATE :: NUM_OF_ROUTINES = 0
++  INTEGER, PRIVATE :: NUM_TREE_NODES = 0
++  INTEGER, PRIVATE :: TIMER_STACK_DEPTH = 0
++
++  CHARACTER(LEN=NUM_MAX_NAMELEN), PRIVATE :: T_NAME(NUM_MAX_ROUTINES) = ''
++  REAL(KIND=8), PRIVATE :: TS(NUM_MAX_ROUTINES) = 0.0D0
++  REAL(KIND=8), PRIVATE :: T_VALUE(NUM_MAX_ROUTINES) = 0.0D0
++  INTEGER, PRIVATE :: CALL_COUNT(NUM_MAX_ROUTINES) = 0
++  LOGICAL, PRIVATE :: TIMER_RUNNING(NUM_MAX_ROUTINES) = .FALSE.
++  INTEGER, PRIVATE :: ACTIVE_TREE_NODE(NUM_MAX_ROUTINES) = 0
++
++  INTEGER, PRIVATE :: TREE_NAME_INDEX(NUM_MAX_TREE_NODES) = 0
++  INTEGER, PRIVATE :: TREE_PARENT(NUM_MAX_TREE_NODES) = 0
++  INTEGER, PRIVATE :: TREE_DEPTH(NUM_MAX_TREE_NODES) = 0
++  INTEGER, PRIVATE :: TREE_CALL_COUNT(NUM_MAX_TREE_NODES) = 0
++  REAL(KIND=8), PRIVATE :: TREE_TS(NUM_MAX_TREE_NODES) = 0.0D0
++  REAL(KIND=8), PRIVATE :: TREE_VALUE(NUM_MAX_TREE_NODES) = 0.0D0
++  INTEGER, PRIVATE :: TIMER_STACK(MAX_TIMER_NESTING) = 0
++
++CONTAINS
++
++  SUBROUTINE RESET_TIMER()
++    NUM_OF_ROUTINES = 0
++    T_NAME = ''
++    TS = 0.0D0
++    T_VALUE = 0.0D0
++    CALL_COUNT = 0
++    TIMER_RUNNING = .FALSE.
++    ACTIVE_TREE_NODE = 0
++    NUM_TREE_NODES = 0
++    TREE_NAME_INDEX = 0
++    TREE_PARENT = 0
++    TREE_DEPTH = 0
++    TREE_CALL_COUNT = 0
++    TREE_TS = 0.0D0
++    TREE_VALUE = 0.0D0
++    TIMER_STACK_DEPTH = 0
++    TIMER_STACK = 0
++  END SUBROUTINE RESET_TIMER
++
++  SUBROUTINE START_TIMER(REGION_NAME)
++    CHARACTER(LEN=*), INTENT(IN) :: REGION_NAME
++    INTEGER :: I, NAME_INDEX, NLEN, NODE_INDEX, PARENT_INDEX
++    REAL(KIND=8) :: T_START
++
++    NLEN = MIN(LEN_TRIM(REGION_NAME), NUM_MAX_NAMELEN)
++    IF (NLEN <= 0) THEN
++      WRITE(0,*) 'Timer region name must not be empty.'
++      RETURN
++    END IF
++    IF (TIMER_STACK_DEPTH >= MAX_TIMER_NESTING) THEN
++      WRITE(0,*) 'Timer nesting exceeds maximum depth ', &
++        MAX_TIMER_NESTING, ': ', TRIM(REGION_NAME)
++      RETURN
++    END IF
++
++    NAME_INDEX = 0
++    DO I = 1, NUM_OF_ROUTINES
++      IF (REGION_NAME(1:NLEN) == TRIM(T_NAME(I))) THEN
++        IF (TIMER_RUNNING(I)) THEN
++          WRITE(0,*) 'Timer for ', TRIM(REGION_NAME), &
++            ' is already started.'
++          RETURN
++        END IF
++        NAME_INDEX = I
++        EXIT
++      END IF
++    END DO
++
++    IF (NAME_INDEX == 0) THEN
++      IF (NUM_OF_ROUTINES >= NUM_MAX_ROUTINES) THEN
++        WRITE(0,*) 'Timer table is full: ', TRIM(REGION_NAME)
++        RETURN
++      END IF
++      NUM_OF_ROUTINES = NUM_OF_ROUTINES + 1
++      NAME_INDEX = NUM_OF_ROUTINES
++      T_NAME(NAME_INDEX) = REGION_NAME(1:NLEN)
++    END IF
++
++    PARENT_INDEX = 0
++    IF (TIMER_STACK_DEPTH > 0) THEN
++      PARENT_INDEX = TIMER_STACK(TIMER_STACK_DEPTH)
++    END IF
++    CALL FIND_OR_ADD_TREE_NODE(NAME_INDEX, PARENT_INDEX, NODE_INDEX)
++    IF (NODE_INDEX == 0) RETURN
++
++    CALL WALLCLOCK(T_START)
++    TIMER_RUNNING(NAME_INDEX) = .TRUE.
++    CALL_COUNT(NAME_INDEX) = CALL_COUNT(NAME_INDEX) + 1
++    TS(NAME_INDEX) = T_START
++    ACTIVE_TREE_NODE(NAME_INDEX) = NODE_INDEX
++    TREE_CALL_COUNT(NODE_INDEX) = TREE_CALL_COUNT(NODE_INDEX) + 1
++    TREE_TS(NODE_INDEX) = T_START
++    TIMER_STACK_DEPTH = TIMER_STACK_DEPTH + 1
++    TIMER_STACK(TIMER_STACK_DEPTH) = NODE_INDEX
++  END SUBROUTINE START_TIMER
++
++  SUBROUTINE STOP_TIMER(REGION_NAME)
++    CHARACTER(LEN=*), INTENT(IN) :: REGION_NAME
++    INTEGER :: I, J, NLEN, NODE_INDEX
++    REAL(KIND=8) :: T_END
++
++    CALL WALLCLOCK(T_END)
++    NLEN = MIN(LEN_TRIM(REGION_NAME), NUM_MAX_NAMELEN)
++    IF (NLEN <= 0) THEN
++      WRITE(0,*) 'Timer region name must not be empty.'
++      RETURN
++    END IF
++
++    DO I = 1, NUM_OF_ROUTINES
++      IF (REGION_NAME(1:NLEN) == TRIM(T_NAME(I))) THEN
++        IF (.NOT. TIMER_RUNNING(I)) THEN
++          WRITE(0,*) 'Timer for ', TRIM(REGION_NAME), &
++            ' is not started.'
++          RETURN
++        END IF
++        TIMER_RUNNING(I) = .FALSE.
++        T_VALUE(I) = T_VALUE(I) + (T_END - TS(I))
++        NODE_INDEX = ACTIVE_TREE_NODE(I)
++        IF (NODE_INDEX > 0) THEN
++          TREE_VALUE(NODE_INDEX) = TREE_VALUE(NODE_INDEX) + &
++            (T_END - TREE_TS(NODE_INDEX))
++        END IF
++        ACTIVE_TREE_NODE(I) = 0
++
++        IF (TIMER_STACK_DEPTH > 0 .AND. &
++            TIMER_STACK(TIMER_STACK_DEPTH) == NODE_INDEX) THEN
++          TIMER_STACK(TIMER_STACK_DEPTH) = 0
++          TIMER_STACK_DEPTH = TIMER_STACK_DEPTH - 1
++        ELSE
++          WRITE(0,*) 'Timer nesting mismatch at ', TRIM(REGION_NAME)
++          DO J = TIMER_STACK_DEPTH, 1, -1
++            IF (TIMER_STACK(J) == NODE_INDEX) THEN
++              TIMER_STACK(J:TIMER_STACK_DEPTH-1) = &
++                TIMER_STACK(J+1:TIMER_STACK_DEPTH)
++              TIMER_STACK(TIMER_STACK_DEPTH) = 0
++              TIMER_STACK_DEPTH = TIMER_STACK_DEPTH - 1
++              EXIT
++            END IF
++          END DO
++        END IF
++        RETURN
++      END IF
++    END DO
++
++    WRITE(0,*) 'Timer for ', TRIM(REGION_NAME), ' is not started.'
++  END SUBROUTINE STOP_TIMER
++
++  SUBROUTINE PRINT_TIMER()
++    INTEGER :: I, IERR, IOS, MY_RANK, OUTPUT_UNIT, TOTAL_COUNT
++    LOGICAL :: MPI_READY, MPI_DONE
++    CHARACTER(LEN=47) :: P_NAME
++    CHARACTER(LEN=64) :: OUTPUT_FILE
++    REAL(KIND=8) :: TOTAL_VALUE
++
++    MY_RANK = 0
++    MPI_READY = .FALSE.
++    MPI_DONE = .FALSE.
++    CALL MPI_INITIALIZED(MPI_READY, IERR)
++    IF (MPI_READY) CALL MPI_FINALIZED(MPI_DONE, IERR)
++    IF (MPI_READY .AND. .NOT. MPI_DONE) THEN
++      CALL MPI_COMM_RANK(MPI_COMM_WORLD, MY_RANK, IERR)
++    END IF
++
++    DO I = 1, NUM_OF_ROUTINES
++      IF (TIMER_RUNNING(I)) THEN
++        WRITE(0,*) 'Timer for ', TRIM(T_NAME(I)), ' is not stopped.'
++        RETURN
++      END IF
++    END DO
++    IF (TIMER_STACK_DEPTH /= 0) THEN
++      WRITE(0,*) 'Timer nesting stack is not empty at print_timer.'
++      RETURN
++    END IF
++
++    WRITE(OUTPUT_FILE,'("ww3_timer_rank",I6.6,".out")') MY_RANK
++    OPEN(NEWUNIT=OUTPUT_UNIT, FILE=TRIM(OUTPUT_FILE), STATUS='REPLACE', &
++      ACTION='WRITE', IOSTAT=IOS)
++    IF (IOS /= 0) THEN
++      WRITE(0,*) 'Could not open timer output: ', TRIM(OUTPUT_FILE), &
++        ' iostat=', IOS
++      RETURN
++    END IF
++
++    TOTAL_COUNT = 0
++    TOTAL_VALUE = 0.0D0
++    WRITE(OUTPUT_UNIT,'(A)') '[WW3 Timer Output]'
++    WRITE(OUTPUT_UNIT,'(A,I0)') 'MPI rank: ', MY_RANK
++    WRITE(OUTPUT_UNIT,'(A)') &
++      'Elapsed time is local and inclusive; indentation shows the call path.'
++    WRITE(OUTPUT_UNIT,'(A)') &
++      '+------------------------------------------------+------+----------+------------+'
++    WRITE(OUTPUT_UNIT,'(A)') &
++      '|Timer region / call path                        |Rank  |Called    |Elapsed     |'
++    WRITE(OUTPUT_UNIT,'(A)') &
++      '|                                                |      |          |Time[s]     |'
++    WRITE(OUTPUT_UNIT,'(A)') &
++      '+------------------------------------------------+------+----------+------------+'
++    CALL PRINT_TIMER_TREE(OUTPUT_UNIT, MY_RANK, TOTAL_COUNT, TOTAL_VALUE)
++    P_NAME = 'TOTAL (inclusive regions)'
++    WRITE(OUTPUT_UNIT,'(A)') &
++      '+------------------------------------------------+------+----------+------------+'
++    WRITE(OUTPUT_UNIT,'(A,A47,A,I6,A,I10,A,F12.3,A)') '|', P_NAME, &
++      '|', MY_RANK, '|', TOTAL_COUNT, '|', TOTAL_VALUE, '|'
++    WRITE(OUTPUT_UNIT,'(A)') &
++      '+------------------------------------------------+------+----------+------------+'
++
++    WRITE(OUTPUT_UNIT,*)
++    WRITE(OUTPUT_UNIT,*) 'WW3_PROFILE_BEGIN'
++    WRITE(OUTPUT_UNIT,*) ' rank  id label                    count', &
++      '        elapsed_sec'
++    DO I = 1, NUM_OF_ROUTINES
++      IF (CALL_COUNT(I) <= 0) CYCLE
++      WRITE(OUTPUT_UNIT,100) MY_RANK, I, T_NAME(I)(1:24), &
++        CALL_COUNT(I), T_VALUE(I)
++    END DO
++    WRITE(OUTPUT_UNIT,*) 'WW3_PROFILE_END'
++    WRITE(OUTPUT_UNIT,*)
++    CLOSE(OUTPUT_UNIT)
++    IF (MY_RANK == 0) THEN
++      WRITE(6,'(A)') 'WW3 timer output is written per MPI rank:'
++      WRITE(6,'(A)') '  ww3_timer_rankNNNNNN.out'
++    END IF
++100 FORMAT(1X,I6,1X,I3,1X,A24,1X,I10,1X,F18.6)
++  END SUBROUTINE PRINT_TIMER
++
++  SUBROUTINE FIND_OR_ADD_TREE_NODE(NAME_INDEX, PARENT_INDEX, NODE_INDEX)
++    INTEGER, INTENT(IN) :: NAME_INDEX, PARENT_INDEX
++    INTEGER, INTENT(OUT) :: NODE_INDEX
++    INTEGER :: I
++
++    DO I = 1, NUM_TREE_NODES
++      IF (TREE_NAME_INDEX(I) == NAME_INDEX .AND. &
++          TREE_PARENT(I) == PARENT_INDEX) THEN
++        NODE_INDEX = I
++        RETURN
++      END IF
++    END DO
++    IF (NUM_TREE_NODES >= NUM_MAX_TREE_NODES) THEN
++      WRITE(0,*) 'Timer call-path table is full: ', TRIM(T_NAME(NAME_INDEX))
++      NODE_INDEX = 0
++      RETURN
++    END IF
++
++    NUM_TREE_NODES = NUM_TREE_NODES + 1
++    NODE_INDEX = NUM_TREE_NODES
++    TREE_NAME_INDEX(NODE_INDEX) = NAME_INDEX
++    TREE_PARENT(NODE_INDEX) = PARENT_INDEX
++    IF (PARENT_INDEX > 0) THEN
++      TREE_DEPTH(NODE_INDEX) = TREE_DEPTH(PARENT_INDEX) + 1
++    ELSE
++      TREE_DEPTH(NODE_INDEX) = 0
++    END IF
++  END SUBROUTINE FIND_OR_ADD_TREE_NODE
++
++  SUBROUTINE PRINT_TIMER_TREE(OUTPUT_UNIT, RANK, TOTAL_COUNT, TOTAL_VALUE)
++    INTEGER, INTENT(IN) :: OUTPUT_UNIT, RANK
++    INTEGER, INTENT(INOUT) :: TOTAL_COUNT
++    REAL(KIND=8), INTENT(INOUT) :: TOTAL_VALUE
++    INTEGER :: I, J, INDENT_LEN, NAME_LEN, NAME_OFFSET
++    INTEGER :: OUTPUT_STACK(NUM_MAX_TREE_NODES), OUTPUT_STACK_SIZE
++    CHARACTER(LEN=47) :: P_NAME
++
++    OUTPUT_STACK = 0
++    OUTPUT_STACK_SIZE = 0
++    DO I = NUM_TREE_NODES, 1, -1
++      IF (TREE_PARENT(I) /= 0) CYCLE
++      OUTPUT_STACK_SIZE = OUTPUT_STACK_SIZE + 1
++      OUTPUT_STACK(OUTPUT_STACK_SIZE) = I
++    END DO
++
++    DO WHILE (OUTPUT_STACK_SIZE > 0)
++      I = OUTPUT_STACK(OUTPUT_STACK_SIZE)
++      OUTPUT_STACK(OUTPUT_STACK_SIZE) = 0
++      OUTPUT_STACK_SIZE = OUTPUT_STACK_SIZE - 1
++      P_NAME = ''
++      INDENT_LEN = MIN(2 * TREE_DEPTH(I), LEN(P_NAME) - 4)
++      NAME_OFFSET = INDENT_LEN
++      IF (TREE_DEPTH(I) > 0) THEN
++        P_NAME(INDENT_LEN+1:INDENT_LEN+3) = '+- '
++        NAME_OFFSET = INDENT_LEN + 3
++      END IF
++      NAME_LEN = MIN(LEN_TRIM(T_NAME(TREE_NAME_INDEX(I))), &
++        LEN(P_NAME) - NAME_OFFSET)
++      IF (NAME_LEN > 0) THEN
++        P_NAME(NAME_OFFSET+1:NAME_OFFSET+NAME_LEN) = &
++          T_NAME(TREE_NAME_INDEX(I))(1:NAME_LEN)
++      END IF
++      TOTAL_COUNT = TOTAL_COUNT + TREE_CALL_COUNT(I)
++      TOTAL_VALUE = TOTAL_VALUE + TREE_VALUE(I)
++      WRITE(OUTPUT_UNIT,'(A,A47,A,I6,A,I10,A,F12.3,A)') '|', P_NAME, &
++        '|', RANK, '|', TREE_CALL_COUNT(I), '|', TREE_VALUE(I), '|'
++      DO J = NUM_TREE_NODES, 1, -1
++        IF (TREE_PARENT(J) /= I) CYCLE
++        OUTPUT_STACK_SIZE = OUTPUT_STACK_SIZE + 1
++        OUTPUT_STACK(OUTPUT_STACK_SIZE) = J
++      END DO
++    END DO
++  END SUBROUTINE PRINT_TIMER_TREE
++
++  SUBROUTINE WALLCLOCK(T)
++    REAL(KIND=8), INTENT(OUT) :: T
++    INTEGER(KIND=8) :: C, C_RATE
++
++    CALL SYSTEM_CLOCK(C, C_RATE)
++    T = DBLE(C) / DBLE(C_RATE)
++  END SUBROUTINE WALLCLOCK
++
++END MODULE MOD_TIMER
+diff --git a/model/src/w3wavemd.F90 b/model/src/w3wavemd.F90
+index 880d3d2c976aa8cce97a324c98574312961743f7..34f88051cdf2d04ca5a4247cf8e9884207cf7e4a 100644
+--- a/model/src/w3wavemd.F90
++++ b/model/src/w3wavemd.F90
+@@ -557,6 +557,9 @@ CONTAINS
+ #ifdef W3_TIMINGS
+     USE W3PARALL, only : PRINT_MY_TIME
+ #endif
++#ifdef WW3_ENABLE_TIMER
++    USE MOD_TIMER, ONLY: START_TIMER, STOP_TIMER
++#endif
+ #ifdef W3_PIO
+     USE W3ODATMD,         ONLY : FNMRST
+     USE W3GDATMD,         ONLY : MAPST2
+@@ -683,6 +686,9 @@ CONTAINS
+     !/ ------------------------------------------------------------------- /
+     ! 0.  Initializations
+     !
++#ifdef WW3_ENABLE_TIMER
++    CALL START_TIMER('wave_model')
++#endif
+     XXX = undef
+     memunit = 40000+iaproc
+     ! 0.a Set pointers to data structure
+@@ -1117,6 +1123,9 @@ CONTAINS
+ 
+       !
+       DO IT = IT0, NT
++#ifdef WW3_ENABLE_TIMER
++        CALL START_TIMER('field_updates')
++#endif
+ #ifdef W3_TIMINGS
+         CALL PRINT_MY_TIME("Begin of IT loop")
+ #endif
+@@ -1516,6 +1525,10 @@ CONTAINS
+         !
+         FLIWND = .FALSE.
+         FLFRST = .FALSE.
++#ifdef WW3_ENABLE_TIMER
++        CALL STOP_TIMER('field_updates')
++        CALL START_TIMER('source_terms_pre')
++#endif
+         !
+ #ifdef W3_PDLIB
+ #ifdef W3_DEBUGSRC
+@@ -1671,6 +1684,9 @@ CONTAINS
+ #endif
+ #endif
+         call print_memcheck(memunit, 'memcheck_____:'//' WW3_WAVE TIME LOOP 14')
++#ifdef WW3_ENABLE_TIMER
++        CALL STOP_TIMER('source_terms_pre')
++#endif
+ 
+         IF ( FLZERO ) THEN
+ #ifdef W3_T
+@@ -1680,6 +1696,9 @@ CONTAINS
+         END IF
+         !
+         IF (IT.NE.0 .AND. .NOT. FLDRY .AND. IAPROC.LE.NAPROC) THEN
++#ifdef WW3_ENABLE_TIMER
++          CALL START_TIMER('propagation')
++#endif
+           !
+           ! Estimation of the local maximum CFL for XY propagation
+           !
+@@ -2209,10 +2228,16 @@ CONTAINS
+             UGDTUPDATE = .FALSE.
+             !
+             ! 3.6 End propapgation  = = = = = = = = = = = = = = = = = = = = = = = =
++#ifdef WW3_ENABLE_TIMER
++            CALL STOP_TIMER('propagation')
++#endif
+           END IF
+ 
+           ! 3.7 Calculate and integrate source terms.
+           !
++#ifdef WW3_ENABLE_TIMER
++          CALL START_TIMER('source_terms')
++#endif
+           IF ( IT.EQ.0 ) DTG = 1.
+           !
+           IF ( .NOT. FLDRY .AND. IAPROC.LE.NAPROC) THEN
+@@ -2377,6 +2402,9 @@ CONTAINS
+             ! End of interations for DTMAX < 1s
+             !
+           END IF
++#ifdef WW3_ENABLE_TIMER
++          CALL STOP_TIMER('source_terms')
++#endif
+ #ifdef W3_SEC1
+           IF (IT.EQ.0) EXIT
+         END DO
+@@ -2437,6 +2465,9 @@ CONTAINS
+       ! 4.a Check if time is output time
+       !     Delay if data assimilation time.
+       !
++#ifdef WW3_ENABLE_TIMER
++      CALL START_TIMER('output')
++#endif
+       !
+       IF ( TOFRST(1)  .EQ. -1 ) THEN
+         DTTST  = 1.
+@@ -2845,6 +2876,9 @@ CONTAINS
+       CALL PRINT_MY_TIME("Before update log file")
+ #endif
+       call print_memcheck(memunit, 'memcheck_____:'//' WW3_WAVE AFTER TIME LOOP 4')
++#ifdef WW3_ENABLE_TIMER
++      CALL STOP_TIMER('output')
++#endif
+       !
+       ! 5.  Update log file ------------------------------------------------ /
+       !
+@@ -2907,6 +2941,9 @@ CONTAINS
+     DEALLOCATE(TAUWX, TAUWY)
+     !
+     call print_memcheck(memunit, 'memcheck_____:'//' WW3_WAVE END W3WAVE')
++#ifdef WW3_ENABLE_TIMER
++    CALL STOP_TIMER('wave_model')
++#endif
+     !
+     RETURN
+     !
+diff --git a/model/src/ww3_shel.F90 b/model/src/ww3_shel.F90
+index a49e8c1b24825fb5f9eeffe1ca0d9af1429c7115..fa190eb5411c19485a286627bf3ba129280f3d62 100644
+--- a/model/src/ww3_shel.F90
++++ b/model/src/ww3_shel.F90
+@@ -283,6 +283,9 @@ PROGRAM W3SHEL
+   USE W3IORSMD, ONLY: OARST
+   USE W3SERVMD, ONLY : NEXTLN, EXTCDE, EXTOPN, EXTIOF
+   USE W3TIMEMD
++#ifdef WW3_ENABLE_TIMER
++  USE MOD_TIMER, ONLY: RESET_TIMER, START_TIMER, STOP_TIMER, PRINT_TIMER
++#endif
+ 
+ #ifdef W3_OASIS
+   USE W3OACPMD, ONLY: CPL_OASIS_INIT, CPL_OASIS_GRID,            &
+@@ -379,6 +382,9 @@ PROGRAM W3SHEL
+   !
+   LOGICAL             :: FLLSTL, FLLSTI, FLLSTR, FLFLG, FLHOM,     &
+        TFLAGI, PRTFRM, FLAGSCI, FLGNML
++#ifdef WW3_ENABLE_TIMER
++  LOGICAL             :: TIMER_FINALIZE_READY = .FALSE.
++#endif
+   LOGICAL             :: FLGRD(NOGRP,NGRPP), FLGD(NOGRP),          &
+        FLGR2(NOGRP,NGRPP), FLG2(NOGRP),          &
+        FLAGSTIDE(4), FLH(-7:10), FLGDAS(3),      &
+@@ -434,6 +440,12 @@ PROGRAM W3SHEL
+ #endif
+   !
+   CALL DATE_AND_TIME ( VALUES=CLKDT1 )
++#ifdef WW3_ENABLE_TIMER
++  CALL RESET_TIMER()
++  CALL START_TIMER('totalnoregion')
++  CALL START_TIMER('initialize')
++  CALL START_TIMER('data_structure_setup')
++#endif
+   !
+   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   ! 0.  Set up data structures
+@@ -453,6 +465,9 @@ PROGRAM W3SHEL
+   CALL W3SETA ( 1, 6, 6 )
+   CALL W3SETO ( 1, 6, 6 )
+   CALL W3SETI ( 1, 6, 6 )
++#ifdef WW3_ENABLE_TIMER
++  CALL STOP_TIMER('data_structure_setup')
++#endif
+ 
+   memunit = 740+IAPROC
+   call print_memcheck(memunit, 'memcheck_____:'//' WW3_SHEL SECTION 1')
+@@ -466,6 +481,9 @@ PROGRAM W3SHEL
+   FLHYBR = .TRUE.
+ #endif
+ 
++#ifdef WW3_ENABLE_TIMER
++  CALL START_TIMER('mpi_setup')
++#endif
+ #ifdef W3_OASIS
+   IF (OASISED.EQ.1) THEN
+     CALL CPL_OASIS_INIT(MPICOMM)
+@@ -496,6 +514,9 @@ PROGRAM W3SHEL
+   CALL MPI_COMM_SIZE ( MPICOMM, NAPROC, IERR_MPI )
+   CALL MPI_COMM_RANK ( MPICOMM, IAPROC, IERR_MPI )
+   IAPROC = IAPROC + 1
++#endif
++#ifdef WW3_ENABLE_TIMER
++  CALL STOP_TIMER('mpi_setup')
+ #endif
+   memunit = 740+IAPROC
+   !
+@@ -504,6 +525,9 @@ PROGRAM W3SHEL
+   !                         ('WAVEFCST',1998,0007,0050,'NP21   ')
+ #endif
+   call print_memcheck(memunit, 'memcheck_____:'//' WW3_SHEL SECTION 2')
++#ifdef WW3_ENABLE_TIMER
++  CALL START_TIMER('configuration_io')
++#endif
+   !
+   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   ! 1.  IO set-up
+@@ -1915,6 +1939,10 @@ PROGRAM W3SHEL
+   END IF
+   !
+   call print_memcheck(memunit, 'memcheck_____:'//' WW3_SHEL SECTION 5')
++#ifdef WW3_ENABLE_TIMER
++  CALL STOP_TIMER('configuration_io')
++  CALL START_TIMER('model_initialize')
++#endif
+   !
+   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   ! 5.  Initializations
+@@ -1991,6 +2019,12 @@ PROGRAM W3SHEL
+   END IF
+ #endif
+ 
++#ifdef WW3_ENABLE_TIMER
++  CALL STOP_TIMER('model_initialize')
++  CALL STOP_TIMER('initialize')
++  CALL START_TIMER('timestep_loop')
++#endif
++
+   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   ! 6.  Model without input
+   !
+@@ -2015,6 +2049,10 @@ PROGRAM W3SHEL
+ #endif
+         )
+     !
++#ifdef WW3_ENABLE_TIMER
++    CALL STOP_TIMER('timestep_loop')
++    TIMER_FINALIZE_READY = .TRUE.
++#endif
+     CALL FINALISE(MPICOMM, IERR_MPI, NDSO, NDS(1), CLKDT1, CLKDT2)
+     !
+   END IF
+@@ -2043,6 +2081,9 @@ PROGRAM W3SHEL
+ 
+   ! 700 timestepping
+   DO WHILE ( DTTST .GT. 0.)
++#ifdef WW3_ENABLE_TIMER
++    CALL START_TIMER('input_update')
++#endif
+     !
+     !
+     ! 7.a Determine next time interval and input fields
+@@ -2580,6 +2621,9 @@ PROGRAM W3SHEL
+     ! 7.b Run the wave model for the given interval
+     !
+     TIME0  = TTIME
++#ifdef WW3_ENABLE_TIMER
++    CALL STOP_TIMER('input_update')
++#endif
+     !
+     CALL W3WAVE ( 1, ODAT, TIME0                                    &
+ #ifdef W3_OASIS
+@@ -2616,7 +2660,13 @@ PROGRAM W3SHEL
+       FLGDAS(2) = DSEC21(TIME,T1N) .EQ. 0.
+       FLGDAS(3) = DSEC21(TIME,T2N) .EQ. 0.
+       !
++#ifdef WW3_ENABLE_TIMER
++      CALL START_TIMER('data_assimilation')
++#endif
+       CALL W3WDAS ( FLGDAS, RCLD, NDT, DATA0, DATA1, DATA2 )
++#ifdef WW3_ENABLE_TIMER
++      CALL STOP_TIMER('data_assimilation')
++#endif
+       !
+       ! 7.d Call wave model again after data assimilation for output only
+       !
+@@ -2638,6 +2688,10 @@ PROGRAM W3SHEL
+ 
+     DTTST  = DSEC21 ( TIME0 , TIMEN )
+   END DO  ! timestepping
++#ifdef WW3_ENABLE_TIMER
++  CALL STOP_TIMER('timestep_loop')
++  TIMER_FINALIZE_READY = .TRUE.
++#endif
+   !
+   !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   !     End of shel
+@@ -2897,10 +2951,21 @@ CONTAINS
+     REAL                  :: CLKFIN, CLKFEL
+     INTEGER               :: CLKDT3(8)
+ 
++#ifdef WW3_ENABLE_TIMER
++    IF (TIMER_FINALIZE_READY) THEN
++      CALL START_TIMER('finalize')
++      CALL START_TIMER('final_barrier')
++    END IF
++#endif
++
+ #ifdef W3_MPI
+     CALL MPI_BARRIER ( MPICOMM_IN, IERR_MPI )
+ #else 
+     IERR_MPI=0
++#endif
++#ifdef WW3_ENABLE_TIMER
++    IF (TIMER_FINALIZE_READY) CALL STOP_TIMER('final_barrier')
++    IF (TIMER_FINALIZE_READY) CALL START_TIMER('final_report')
+ #endif
+     !
+     IF ( IAPROC .EQ. NAPOUT ) THEN
+@@ -2915,6 +2980,14 @@ CONTAINS
+       END IF
+       WRITE (NDSO,999)
+     END IF
++#ifdef WW3_ENABLE_TIMER
++    IF (TIMER_FINALIZE_READY) THEN
++      CALL STOP_TIMER('final_report')
++      CALL STOP_TIMER('finalize')
++      CALL STOP_TIMER('totalnoregion')
++      CALL PRINT_TIMER()
++    END IF
++#endif
+     !
+ #ifdef W3_NCO
+ !    IF ( IAPROC .EQ. 1 ) CALL W3TAGE('WAVEFCST')
+diff --git a/tools/build_nvhpc_legacy.sh b/tools/build_nvhpc_legacy.sh
+index fc43028ec68c304e10611d5bc6aa1f7c861fc8a7..ca3aec8a351074e2efdc0454f1df9a1327ab9f3d 100755
+--- a/tools/build_nvhpc_legacy.sh
++++ b/tools/build_nvhpc_legacy.sh
+@@ -13,6 +13,7 @@ parallel_switch="${WW3_PARALLEL_SWITCH:-ST4_UOST}"
+ compiler_name="${WW3_LEGACY_COMPILER:-nvhpc}"
+ scratch_dir="${WW3_LEGACY_TMP:-${model_dir}/tmp-nvhpc-legacy}"
+ jobs="${WW3_JOBS:-4}"
++timer_mode="${WW3_ENABLE_TIMER:-ON}"
+ shared_programs=(ww3_grid ww3_strt ww3_prnc ww3_ounf ww3_ounp)
+ parallel_programs=(ww3_shel)
+ programs=("${shared_programs[@]}" "${parallel_programs[@]}")
+@@ -31,6 +32,38 @@ case "${jobs}" in
+     exit 2
+     ;;
+ esac
++case "${timer_mode}" in
++  ON|on|YES|yes|TRUE|true|1)
++    timer_mode="ON"
++    timer_flag="-DWW3_ENABLE_TIMER"
++    ;;
++  OFF|off|NO|no|FALSE|false|0)
++    timer_mode="OFF"
++    timer_flag=""
++    ;;
++  *)
++    echo "ERROR: WW3_ENABLE_TIMER must be ON or OFF." >&2
++    exit 2
++    ;;
++esac
++extra_comp_options="${EXTRA_COMP_OPTIONS:-}"
++extra_cpp_flags="${WW3_EXTRA_CPP_FLAGS:-}"
++if [[ " ${extra_comp_options} " == *" -DWW3_ENABLE_TIMER "* ]]; then
++  if [[ "${timer_mode}" == "OFF" ]]; then
++    echo "ERROR: WW3_ENABLE_TIMER=OFF conflicts with -DWW3_ENABLE_TIMER in EXTRA_COMP_OPTIONS." >&2
++    exit 2
++  fi
++elif [[ "${timer_mode}" == "ON" ]]; then
++  extra_comp_options="${extra_comp_options}${extra_comp_options:+ }${timer_flag}"
++fi
++if [[ " ${extra_cpp_flags} " == *" -DWW3_ENABLE_TIMER "* ]]; then
++  if [[ "${timer_mode}" == "OFF" ]]; then
++    echo "ERROR: WW3_ENABLE_TIMER=OFF conflicts with -DWW3_ENABLE_TIMER in WW3_EXTRA_CPP_FLAGS." >&2
++    exit 2
++  fi
++elif [[ "${timer_mode}" == "ON" ]]; then
++  extra_cpp_flags="${extra_cpp_flags}${extra_cpp_flags:+ }${timer_flag}"
++fi
+ 
+ require_command() {
+   command -v "$1" >/dev/null 2>&1 || {
+@@ -39,7 +72,7 @@ require_command() {
+   }
+ }
+ 
+-for command_name in make ar cc nvfortran mpifort mpicc; do
++for command_name in make ar cc cksum nvfortran mpifort mpicc; do
+   require_command "${command_name}"
+ done
+ for config in "${nc_config}" "${nf_config}"; do
+@@ -83,6 +116,8 @@ export WW3_LEGACY_NC_CONFIG="${nc_config}"
+ export WW3_LEGACY_NF_CONFIG="${nf_config}"
+ export NETCDF_CONFIG="${script_dir}/nvhpc_netcdf_config.sh"
+ export WW3_PARCOMPN="${jobs}"
++export EXTRA_COMP_OPTIONS="${extra_comp_options}"
++export WW3_EXTRA_CPP_FLAGS="${extra_cpp_flags}"
+ export PATH="${netcdf_prefix}/bin:${PATH}"
+ export LD_LIBRARY_PATH="${netcdf_prefix}/lib:${netcdf_prefix}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+ 
+@@ -93,9 +128,48 @@ echo "  MPI      : $(command -v mpifort)"
+ echo "  NetCDF   : ${netcdf_prefix}"
+ echo "  switches : switch_${shared_switch} (5 sequential LM)"
+ echo "             switch_${parallel_switch} (ww3_shel MPI)"
++echo "  timer    : ${timer_mode} (WW3_ENABLE_TIMER)"
+ echo "  scratch  : ${scratch_dir}"
+ 
+ "${script_dir}/select_legacy_build_tree.sh" "${model_dir}" "${compiler_name}"
++
++# Compiler options and all module source changes are not reliably represented
++# by the timestamps used by the WW3 legacy makefiles.  Invalidate only
++# timer-aware objects when either the mode or timer source signature changes.
++# This also prevents a stale mod_timer.mod from retaining an older MPI module
++# dependency after the source has been updated.
++state_root="${WW3_LEGACY_STATE_ROOT:-${model_dir}/.legacy-builds}"
++timer_state_file="${state_root}/${compiler_name}/timer-mode"
++timer_signature_file="${state_root}/${compiler_name}/timer-signature"
++previous_timer_mode=""
++previous_timer_signature=""
++if [[ -r "${timer_state_file}" ]]; then
++  previous_timer_mode="$(<"${timer_state_file}")"
++fi
++if [[ -r "${timer_signature_file}" ]]; then
++  previous_timer_signature="$(<"${timer_signature_file}")"
++fi
++timer_signature="$({
++  printf 'mode=%s\n' "${timer_mode}"
++  cksum \
++    "${model_dir}/src/mod_timer.F90" \
++    "${model_dir}/src/w3wavemd.F90" \
++    "${model_dir}/src/ww3_shel.F90"
++} | cksum | awk '{print $1 ":" $2}')"
++if [[ "${previous_timer_mode}" != "${timer_mode}" || \
++      "${previous_timer_signature}" != "${timer_signature}" ]]; then
++  echo "Timer configuration changed; refreshing timer-aware objects."
++  rm -f \
++    "${model_dir}/obj_MPI/mod_timer.o" \
++    "${model_dir}/obj_MPI/w3wavemd.o" \
++    "${model_dir}/obj_MPI/ww3_shel.o" \
++    "${model_dir}/mod_MPI/mod_timer.mod" \
++    "${model_dir}/mod_MPI/w3wavemd.mod" \
++    "${model_dir}/exe/ww3_shel"
++  printf '%s\n' "${timer_mode}" > "${timer_state_file}"
++  printf '%s\n' "${timer_signature}" > "${timer_signature_file}"
++fi
++
+ "${script_dir}/prepare_legacy_program_set.sh" "${model_dir}" "${programs[@]}"
+ 
+ build_program_group() {

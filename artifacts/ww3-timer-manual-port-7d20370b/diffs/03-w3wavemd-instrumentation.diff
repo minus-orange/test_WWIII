@@ -1,0 +1,122 @@
+diff --git a/model/src/w3wavemd.F90 b/model/src/w3wavemd.F90
+index 880d3d2c976aa8cce97a324c98574312961743f7..34f88051cdf2d04ca5a4247cf8e9884207cf7e4a 100644
+--- a/model/src/w3wavemd.F90
++++ b/model/src/w3wavemd.F90
+@@ -557,6 +557,9 @@ CONTAINS
+ #ifdef W3_TIMINGS
+     USE W3PARALL, only : PRINT_MY_TIME
+ #endif
++#ifdef WW3_ENABLE_TIMER
++    USE MOD_TIMER, ONLY: START_TIMER, STOP_TIMER
++#endif
+ #ifdef W3_PIO
+     USE W3ODATMD,         ONLY : FNMRST
+     USE W3GDATMD,         ONLY : MAPST2
+@@ -683,6 +686,9 @@ CONTAINS
+     !/ ------------------------------------------------------------------- /
+     ! 0.  Initializations
+     !
++#ifdef WW3_ENABLE_TIMER
++    CALL START_TIMER('wave_model')
++#endif
+     XXX = undef
+     memunit = 40000+iaproc
+     ! 0.a Set pointers to data structure
+@@ -1117,6 +1123,9 @@ CONTAINS
+ 
+       !
+       DO IT = IT0, NT
++#ifdef WW3_ENABLE_TIMER
++        CALL START_TIMER('field_updates')
++#endif
+ #ifdef W3_TIMINGS
+         CALL PRINT_MY_TIME("Begin of IT loop")
+ #endif
+@@ -1516,6 +1525,10 @@ CONTAINS
+         !
+         FLIWND = .FALSE.
+         FLFRST = .FALSE.
++#ifdef WW3_ENABLE_TIMER
++        CALL STOP_TIMER('field_updates')
++        CALL START_TIMER('source_terms_pre')
++#endif
+         !
+ #ifdef W3_PDLIB
+ #ifdef W3_DEBUGSRC
+@@ -1671,6 +1684,9 @@ CONTAINS
+ #endif
+ #endif
+         call print_memcheck(memunit, 'memcheck_____:'//' WW3_WAVE TIME LOOP 14')
++#ifdef WW3_ENABLE_TIMER
++        CALL STOP_TIMER('source_terms_pre')
++#endif
+ 
+         IF ( FLZERO ) THEN
+ #ifdef W3_T
+@@ -1680,6 +1696,9 @@ CONTAINS
+         END IF
+         !
+         IF (IT.NE.0 .AND. .NOT. FLDRY .AND. IAPROC.LE.NAPROC) THEN
++#ifdef WW3_ENABLE_TIMER
++          CALL START_TIMER('propagation')
++#endif
+           !
+           ! Estimation of the local maximum CFL for XY propagation
+           !
+@@ -2209,10 +2228,16 @@ CONTAINS
+             UGDTUPDATE = .FALSE.
+             !
+             ! 3.6 End propapgation  = = = = = = = = = = = = = = = = = = = = = = = =
++#ifdef WW3_ENABLE_TIMER
++            CALL STOP_TIMER('propagation')
++#endif
+           END IF
+ 
+           ! 3.7 Calculate and integrate source terms.
+           !
++#ifdef WW3_ENABLE_TIMER
++          CALL START_TIMER('source_terms')
++#endif
+           IF ( IT.EQ.0 ) DTG = 1.
+           !
+           IF ( .NOT. FLDRY .AND. IAPROC.LE.NAPROC) THEN
+@@ -2377,6 +2402,9 @@ CONTAINS
+             ! End of interations for DTMAX < 1s
+             !
+           END IF
++#ifdef WW3_ENABLE_TIMER
++          CALL STOP_TIMER('source_terms')
++#endif
+ #ifdef W3_SEC1
+           IF (IT.EQ.0) EXIT
+         END DO
+@@ -2437,6 +2465,9 @@ CONTAINS
+       ! 4.a Check if time is output time
+       !     Delay if data assimilation time.
+       !
++#ifdef WW3_ENABLE_TIMER
++      CALL START_TIMER('output')
++#endif
+       !
+       IF ( TOFRST(1)  .EQ. -1 ) THEN
+         DTTST  = 1.
+@@ -2845,6 +2876,9 @@ CONTAINS
+       CALL PRINT_MY_TIME("Before update log file")
+ #endif
+       call print_memcheck(memunit, 'memcheck_____:'//' WW3_WAVE AFTER TIME LOOP 4')
++#ifdef WW3_ENABLE_TIMER
++      CALL STOP_TIMER('output')
++#endif
+       !
+       ! 5.  Update log file ------------------------------------------------ /
+       !
+@@ -2907,6 +2941,9 @@ CONTAINS
+     DEALLOCATE(TAUWX, TAUWY)
+     !
+     call print_memcheck(memunit, 'memcheck_____:'//' WW3_WAVE END W3WAVE')
++#ifdef WW3_ENABLE_TIMER
++    CALL STOP_TIMER('wave_model')
++#endif
+     !
+     RETURN
+     !
