@@ -116,3 +116,10 @@ UOSTの格子幅に関する警告と、境界入力がないことを示す`W3I
 test_result_dir=regtests/ww3_ts4/work_nvhpc_uost_20260806T150000Z_12345
 tail -n 30 "${test_result_dir}/ww3_shel.out"
 ```
+
+タイマー有効版では、各MPI rankの計測結果を同じwork directoryの
+`ww3_timer_rankNNNNNN.out`へ保存する。1 rank smoke testの確認例:
+
+```bash
+cat "${test_result_dir}/ww3_timer_rank000000.out"
+```

@@ -58,6 +58,8 @@ NVHPC版LMの恒久的な場所は`model/.legacy-builds/nvhpc/exe`である。
 `ww3_shel`の階層タイマーは既定で有効であり、build時に
 `-DWW3_ENABLE_TIMER`が追加される。最外周の`totalnoregion`を含む最大4階層で
 `initialize`、`timestep_loop`、`finalize`と、`W3WAVE`内のsource項・伝播・出力等を測定する。
+MPI collectiveによる集約は行わず、各processが`ww3_timer_rankNNNNNN.out`へ
+自身の計測結果を出力する。
 
 ```bash
 # 既定（タイマー有効）
@@ -69,7 +71,7 @@ WW3_ENABLE_TIMER=OFF ./tools/build_nvhpc_legacy.sh
 
 切替時、またはタイマー関連sourceの内容が更新された場合は、関係objectとmoduleだけを
 自動的に再コンパイルする。Region一覧、出力形式、
-MPI集計値の読み方は[階層タイマー](nvhpc_timer.md)を参照する。
+rank別出力の読み方は[階層タイマー](nvhpc_timer.md)を参照する。
 
 ## NetCDF config互換wrapper
 

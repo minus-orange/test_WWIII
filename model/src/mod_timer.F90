@@ -8,12 +8,12 @@
 !
 ! The FPSEID-specific external wrappers and diagnostic report were removed.
 ! The module interface (reset_timer, start_timer, stop_timer, print_timer)
-! and MPI max/average aggregation are retained.  WW3 instrumentation is
-! deliberately limited to four active timer regions.
+! is retained.  Each MPI process keeps and writes its own timing data; no
+! timer collectives are used.  WW3 instrumentation is deliberately limited
+! to four active timer regions.
 MODULE MOD_TIMER
   USE MPI_F08, ONLY: MPI_INITIALIZED, MPI_FINALIZED, MPI_COMM_RANK, &
-    MPI_COMM_SIZE, MPI_ALLREDUCE, MPI_REDUCE, MPI_COMM_WORLD, &
-    MPI_INTEGER, MPI_MIN, MPI_MAX, MPI_SUM, MPI_DOUBLE_PRECISION
+    MPI_COMM_WORLD
   IMPLICIT NONE
   PRIVATE
 
@@ -173,45 +173,19 @@ CONTAINS
   END SUBROUTINE STOP_TIMER
 
   SUBROUTINE PRINT_TIMER()
-    INTEGER :: I, IERR, MY_RANK, NPROC
-    INTEGER :: MIN_ROUTINES, MAX_ROUTINES, TOTAL_COUNT
-    INTEGER :: COUNT_MAX(NUM_MAX_ROUTINES)
+    INTEGER :: I, IERR, IOS, MY_RANK, OUTPUT_UNIT, TOTAL_COUNT
     LOGICAL :: MPI_READY, MPI_DONE
     CHARACTER(LEN=47) :: P_NAME
+    CHARACTER(LEN=64) :: OUTPUT_FILE
     REAL(KIND=8) :: TOTAL_VALUE
-    REAL(KIND=8) :: VALUE_SUM(NUM_MAX_ROUTINES)
-    REAL(KIND=8) :: VALUE_MAX(NUM_MAX_ROUTINES)
 
     MY_RANK = 0
-    NPROC = 1
     MPI_READY = .FALSE.
     MPI_DONE = .FALSE.
     CALL MPI_INITIALIZED(MPI_READY, IERR)
     IF (MPI_READY) CALL MPI_FINALIZED(MPI_DONE, IERR)
     IF (MPI_READY .AND. .NOT. MPI_DONE) THEN
       CALL MPI_COMM_RANK(MPI_COMM_WORLD, MY_RANK, IERR)
-      CALL MPI_COMM_SIZE(MPI_COMM_WORLD, NPROC, IERR)
-      CALL MPI_ALLREDUCE(NUM_OF_ROUTINES, MIN_ROUTINES, 1, MPI_INTEGER, &
-        MPI_MIN, MPI_COMM_WORLD, IERR)
-      CALL MPI_ALLREDUCE(NUM_OF_ROUTINES, MAX_ROUTINES, 1, MPI_INTEGER, &
-        MPI_MAX, MPI_COMM_WORLD, IERR)
-      IF (MIN_ROUTINES /= MAX_ROUTINES) THEN
-        IF (MY_RANK == 0) THEN
-          WRITE(0,*) 'Timer region count differs between MPI ranks.'
-        END IF
-        RETURN
-      END IF
-      CALL MPI_REDUCE(T_VALUE, VALUE_SUM, NUM_MAX_ROUTINES, &
-        MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, IERR)
-      CALL MPI_REDUCE(T_VALUE, VALUE_MAX, NUM_MAX_ROUTINES, &
-        MPI_DOUBLE_PRECISION, MPI_MAX, 0, MPI_COMM_WORLD, IERR)
-      CALL MPI_REDUCE(CALL_COUNT, COUNT_MAX, NUM_MAX_ROUTINES, &
-        MPI_INTEGER, MPI_MAX, 0, MPI_COMM_WORLD, IERR)
-      IF (MY_RANK /= 0) RETURN
-    ELSE
-      VALUE_SUM = T_VALUE
-      VALUE_MAX = T_VALUE
-      COUNT_MAX = CALL_COUNT
     END IF
 
     DO I = 1, NUM_OF_ROUTINES
@@ -225,34 +199,55 @@ CONTAINS
       RETURN
     END IF
 
+    WRITE(OUTPUT_FILE,'("ww3_timer_rank",I6.6,".out")') MY_RANK
+    OPEN(NEWUNIT=OUTPUT_UNIT, FILE=TRIM(OUTPUT_FILE), STATUS='REPLACE', &
+      ACTION='WRITE', IOSTAT=IOS)
+    IF (IOS /= 0) THEN
+      WRITE(0,*) 'Could not open timer output: ', TRIM(OUTPUT_FILE), &
+        ' iostat=', IOS
+      RETURN
+    END IF
+
     TOTAL_COUNT = 0
     TOTAL_VALUE = 0.0D0
-    WRITE(6,'(A)') ''
-    WRITE(6,'(A)') '[WW3 Timer Output]'
-    WRITE(6,'(A)') 'Elapsed time is inclusive; indentation shows the call path.'
-    WRITE(6,'(A)') '+------------------------------------------------+------+----------+------------+'
-    WRITE(6,'(A)') '|Timer region / call path                        |Rank  |Called    |Elapsed     |'
-    WRITE(6,'(A)') '|                                                |      |          |Time[s]     |'
-    WRITE(6,'(A)') '+------------------------------------------------+------+----------+------------+'
-    CALL PRINT_TIMER_TREE(MY_RANK, TOTAL_COUNT, TOTAL_VALUE)
+    WRITE(OUTPUT_UNIT,'(A)') '[WW3 Timer Output]'
+    WRITE(OUTPUT_UNIT,'(A,I0)') 'MPI rank: ', MY_RANK
+    WRITE(OUTPUT_UNIT,'(A)') &
+      'Elapsed time is local and inclusive; indentation shows the call path.'
+    WRITE(OUTPUT_UNIT,'(A)') &
+      '+------------------------------------------------+------+----------+------------+'
+    WRITE(OUTPUT_UNIT,'(A)') &
+      '|Timer region / call path                        |Rank  |Called    |Elapsed     |'
+    WRITE(OUTPUT_UNIT,'(A)') &
+      '|                                                |      |          |Time[s]     |'
+    WRITE(OUTPUT_UNIT,'(A)') &
+      '+------------------------------------------------+------+----------+------------+'
+    CALL PRINT_TIMER_TREE(OUTPUT_UNIT, MY_RANK, TOTAL_COUNT, TOTAL_VALUE)
     P_NAME = 'TOTAL (inclusive regions)'
-    WRITE(6,'(A)') '+------------------------------------------------+------+----------+------------+'
-    WRITE(6,'(A,A47,A,I6,A,I10,A,F12.3,A)') '|', P_NAME, &
+    WRITE(OUTPUT_UNIT,'(A)') &
+      '+------------------------------------------------+------+----------+------------+'
+    WRITE(OUTPUT_UNIT,'(A,A47,A,I6,A,I10,A,F12.3,A)') '|', P_NAME, &
       '|', MY_RANK, '|', TOTAL_COUNT, '|', TOTAL_VALUE, '|'
-    WRITE(6,'(A)') '+------------------------------------------------+------+----------+------------+'
+    WRITE(OUTPUT_UNIT,'(A)') &
+      '+------------------------------------------------+------+----------+------------+'
 
-    WRITE(6,*)
-    WRITE(6,*) 'WW3_PROFILE_BEGIN'
-    WRITE(6,*) ' id label                    count', &
-      '      max_rank_sec       avg_rank_sec'
+    WRITE(OUTPUT_UNIT,*)
+    WRITE(OUTPUT_UNIT,*) 'WW3_PROFILE_BEGIN'
+    WRITE(OUTPUT_UNIT,*) ' rank  id label                    count', &
+      '        elapsed_sec'
     DO I = 1, NUM_OF_ROUTINES
-      IF (COUNT_MAX(I) <= 0) CYCLE
-      WRITE(6,100) I, T_NAME(I)(1:24), COUNT_MAX(I), VALUE_MAX(I), &
-        VALUE_SUM(I) / DBLE(NPROC)
+      IF (CALL_COUNT(I) <= 0) CYCLE
+      WRITE(OUTPUT_UNIT,100) MY_RANK, I, T_NAME(I)(1:24), &
+        CALL_COUNT(I), T_VALUE(I)
     END DO
-    WRITE(6,*) 'WW3_PROFILE_END'
-    WRITE(6,*)
-100 FORMAT(1X,I3,1X,A24,1X,I10,2(1X,F18.6))
+    WRITE(OUTPUT_UNIT,*) 'WW3_PROFILE_END'
+    WRITE(OUTPUT_UNIT,*)
+    CLOSE(OUTPUT_UNIT)
+    IF (MY_RANK == 0) THEN
+      WRITE(6,'(A)') 'WW3 timer output is written per MPI rank:'
+      WRITE(6,'(A)') '  ww3_timer_rankNNNNNN.out'
+    END IF
+100 FORMAT(1X,I6,1X,I3,1X,A24,1X,I10,1X,F18.6)
   END SUBROUTINE PRINT_TIMER
 
   SUBROUTINE FIND_OR_ADD_TREE_NODE(NAME_INDEX, PARENT_INDEX, NODE_INDEX)
@@ -284,8 +279,8 @@ CONTAINS
     END IF
   END SUBROUTINE FIND_OR_ADD_TREE_NODE
 
-  SUBROUTINE PRINT_TIMER_TREE(RANK, TOTAL_COUNT, TOTAL_VALUE)
-    INTEGER, INTENT(IN) :: RANK
+  SUBROUTINE PRINT_TIMER_TREE(OUTPUT_UNIT, RANK, TOTAL_COUNT, TOTAL_VALUE)
+    INTEGER, INTENT(IN) :: OUTPUT_UNIT, RANK
     INTEGER, INTENT(INOUT) :: TOTAL_COUNT
     REAL(KIND=8), INTENT(INOUT) :: TOTAL_VALUE
     INTEGER :: I, J, INDENT_LEN, NAME_LEN, NAME_OFFSET
@@ -319,7 +314,7 @@ CONTAINS
       END IF
       TOTAL_COUNT = TOTAL_COUNT + TREE_CALL_COUNT(I)
       TOTAL_VALUE = TOTAL_VALUE + TREE_VALUE(I)
-      WRITE(6,'(A,A47,A,I6,A,I10,A,F12.3,A)') '|', P_NAME, &
+      WRITE(OUTPUT_UNIT,'(A,A47,A,I6,A,I10,A,F12.3,A)') '|', P_NAME, &
         '|', RANK, '|', TREE_CALL_COUNT(I), '|', TREE_VALUE(I), '|'
       DO J = NUM_TREE_NODES, 1, -1
         IF (TREE_PARENT(J) /= I) CYCLE

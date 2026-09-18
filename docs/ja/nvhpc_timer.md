@@ -13,8 +13,8 @@ NVHPCのCMake不使用legacy buildで、`ww3_shel`の全体時間、初期化、
 - 取込先: `model/src/mod_timer.F90`
 
 FPSEID固有の外部wrapperと診断出力は除き、`reset_timer`、`start_timer`、
-`stop_timer`、`print_timer`、MPI rank間の最大値・平均値集計を使用する。
-計測結果は`MPI_FINALIZE`より前にrank 0へ出力する。
+`stop_timer`、`print_timer`を使用する。MPI collectiveによるrank間集約は行わず、
+各processが自身の呼出し回数と経過時間を`MPI_FINALIZE`より前にrank別ファイルへ出力する。
 
 ## ビルド時の有効・無効
 
@@ -39,8 +39,9 @@ WW3_ENABLE_TIMER=OFF ./tools/build_nvhpc_legacy.sh
 scriptは有効時だけ`-DWW3_ENABLE_TIMER`を`WW3_EXTRA_CPP_FLAGS`と
 `EXTRA_COMP_OPTIONS`へ追加する。前者は`ad3`のsource生成時、後者はcompiler実行時に
 同じ`ifdef`を有効にする。
-前回とモードが変わった場合は、legacy Makefileが古いobjectを再利用しないよう、
-タイマーに関係する`mod_timer`、`w3wavemd`、`ww3_shel`だけを再コンパイルする。
+前回とモードが変わった場合、またはタイマー関連sourceが更新された場合は、legacy
+Makefileが古いobjectを再利用しないよう、`mod_timer`、`w3wavemd`、`ww3_shel`だけを
+再コンパイルする。
 
 ## 計測階層
 
@@ -77,28 +78,40 @@ totalnoregion
 
 ## 出力確認
 
-正常終了時の標準出力に、呼出し木とrank間集計が出る。
+正常終了時は、MPI rankごとに次のファイルを作成する。
+
+```text
+ww3_timer_rank000000.out
+ww3_timer_rank000001.out
+ww3_timer_rank000002.out
+...
+```
+
+各ファイルには、そのrankだけの呼出し木とprocess-local集計が出る。
 
 ```text
 [WW3 Timer Output]
+MPI rank: 0
 ...
  WW3_PROFILE_BEGIN
- id label                    count      max_rank_sec       avg_rank_sec
+ rank  id label                    count        elapsed_sec
 ...
  WW3_PROFILE_END
 ```
 
-呼出し木の時間はrank 0のinclusive timeである。`WW3_PROFILE_BEGIN`以降の
-`max_rank_sec`は全rankの最大値、`avg_rank_sec`は全rank平均値なので、性能比較では
-原則として`max_rank_sec`を使用する。初期化途中の入力エラー等で終了した場合は、
-未完了区間を誤って集計しないためタイマー表を出力しない。
+`elapsed_sec`はファイル名で示されるrank自身のinclusive timeである。rank間の最大値や
+平均値が必要な場合は、実行後にこれらのファイルを別途集計する。タイマー出力処理には
+`MPI_ALLREDUCE`、`MPI_REDUCE`、barrier等を追加しない。初期化途中の入力エラー等で
+終了した場合は、未完了区間を誤って記録しないためタイマーファイルを出力しない。
 
 ## 計測上の注意
 
 - 各区間はinclusive timeであり、親区間は子区間を含む。
 - `TOTAL (inclusive regions)`は親子を重複加算した表示で、実行全体時間ではない。
-- `totalnoregion`と`finalize`は、rank間集計をMPI終了前に行う必要があるため、
-  `MPI_FINALIZE`そのものと、その後に実行できない処理は含まない。
+- `totalnoregion`と`finalize`は、rank番号を取得してファイル出力する必要があるため、
+  `MPI_FINALIZE`そのものと、その後に実行される処理は含まない。
+- rank別ファイルは同名を`STATUS='REPLACE'`で開くため、同じdirectoryで再実行すると
+  前回結果を上書きする。保存が必要な場合は実行ごとにdirectoryを分ける。
 - 計測のON/OFFを比較する場合は、同じswitch、MPI rank数、入力、GPU、実行条件を使う。
 - `W3_SEC1`は今回の`switch_ST4_UOST`に含まれない。別switchへ展開する場合は、
   sub-second loopとタイマー開始・終了の対応を再確認する。
